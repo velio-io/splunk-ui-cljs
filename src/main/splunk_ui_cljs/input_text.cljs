@@ -9,8 +9,8 @@
    model = r/atom
    on-change = function to deal with state changes
    input-type = type of input (html5) e.g. [text, password]"
-  [{:keys [model on-change input-type disabled?]
-     :or {disabled? false input-type "text"}}]
+  [& {:keys [model on-change input-type disabled?]
+      :or {disabled? false input-type "text"}}]
    [text  {:value (when model @model)
            :onChange (fn [e]
                        (let [new-val (.. e -target -value)]
