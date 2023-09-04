@@ -1,0 +1,14 @@
+;; shadow-cljs configuration
+{:source-paths
+ ["src/dev"
+  "src/main"
+  "src/test"]
+
+ :dependencies
+ [[reagent "1.1.1"]
+  [re-frame "1.2.0"]
+  [cljs-ajax "0.7.3"]
+  [cljs-styled-components "0.1.12"]]
+
+ :builds
+ {}}
