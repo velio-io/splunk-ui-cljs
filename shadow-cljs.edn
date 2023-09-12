@@ -11,4 +11,7 @@
   [cljs-styled-components "0.1.12"]]
 
  :builds
- {}}
+ {:stories
+  {:target     :npm-module
+   :ns-regexp  "-stories$"
+   :output-dir "public/js/stories"}}}
