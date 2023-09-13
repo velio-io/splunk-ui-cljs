@@ -3,29 +3,9 @@
    ["react" :as react]
    [reagent.core :as r]
    [cljs-styled-components.reagent :refer-macros [defstyled]]
+   [splunk-ui-cljs.utils :as utils]
    ["@splunk/react-ui/Text" :default Text]
    ["@splunk/react-ui/TextArea" :default TextArea]))
-
-
-(defn assoc-some
-  "Associates a key k, with a value v in a map m, if and only if v is not nil."
-  ([m k v]
-   (if (nil? v) m (assoc m k v)))
-
-  ([m k v & kvs]
-   (reduce (fn [m [k v]] (assoc-some m k v))
-           (assoc-some m k v)
-           (partition 2 kvs))))
-
-
-(defn model->value
-  "Takes a value or an atom
-   If it's a value, returns it
-   If it's a Reagent object that supports IDeref, returns the value inside it by derefing"
-  [val-or-atom]
-  (if (satisfies? IDeref val-or-atom)
-    @val-or-atom
-    val-or-atom))
 
 
 (defstyled text-base Text
@@ -48,7 +28,7 @@
    on-change = function to deal with state changes
    input-type = type of input (html5) e.g. [text, password]"
   [{:keys [model]}]
-  (let [initial-value  (model->value model)
+  (let [initial-value  (utils/model->value model)
         external-state (r/atom initial-value)
         local-state    (r/atom (if (nil? initial-value) "" initial-value))
         input-ref      (react/createRef)
@@ -58,7 +38,8 @@
                            (js/setTimeout #(.setSelectionRange input-element start end))))]
     (fn [{:keys [model on-change input-type disabled? placeholder status width validation-regex rows]
           :or   {disabled? false input-type "text"}}]
-      (let [on-change-handler (fn [new-val]
+      (let [disabled?         (utils/model->value disabled?)
+            on-change-handler (fn [new-val]
                                 (reset! local-state new-val)
 
                                 (when (fn? on-change)
@@ -68,7 +49,7 @@
                                       (on-change new-val reset-fn)
                                       (do (on-change new-val)
                                           (reset-fn))))))
-            latest-ext-value  (model->value model)
+            latest-ext-value  (utils/model->value model)
             textarea?         (= input-type "textarea")
             base-component    (if textarea? textarea-base text-base)
             base-props        {:onChange (fn [e]
@@ -95,7 +76,7 @@
           (reset! external-state latest-ext-value)
           (reset! local-state latest-ext-value))
 
-        [base-component (assoc-some base-props
+        [base-component (utils/assoc-some base-props
                           :rowsMin (when textarea? rows)
                           :placeholder (when-not textarea? placeholder)
                           :type (when-not textarea? input-type))]))))

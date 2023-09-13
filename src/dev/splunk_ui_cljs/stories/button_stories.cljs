@@ -10,11 +10,24 @@
   (utils/->default
    {:title     "Button"
     :component button
-    :argTypes  {:label      {:control "text"}
-                :appearance {:control "select"
-                             :options ["default", "secondary", "primary", "destructive", "pill", "toggle", "flat"]}
-                :disabled   {:control "radio"
-                             :options [true false]}}}))
+    :argTypes  {:label      {:type        {:name "string" :required false}
+                             :description "Applies the text that displays on the button."
+                             :control     "text"}
+                :appearance {:type         {:name "string" :required false}
+                             :description  "Changes the style of the button."
+                             :defaultValue "default"
+                             :control      "select"
+                             :options      ["default", "secondary", "primary", "destructive", "pill", "toggle", "flat"]}
+                :disabled?  {:type         {:name "boolean" :required false}
+                             :description  "Prevents user from clicking the button."
+                             :defaultValue false
+                             :control      "boolean"}
+                :on-click   {:type        {:name "function" :required false}
+                             :description "Prevents callback when the button is disabled."
+                             :control     {:type nil}}
+                :to         {:type        {:name "string" :required false}
+                             :description "Prevents callback when the button is disabled."
+                             :control     "text"}}}))
 
 
 (defn ^:export button-variants [args]
