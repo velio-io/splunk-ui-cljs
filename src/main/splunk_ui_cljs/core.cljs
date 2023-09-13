@@ -1,9 +1,14 @@
 (ns splunk-ui-cljs.core
   (:require
-   [splunk-ui-cljs.input-text :as input-text]
-   [splunk-ui-cljs.line :as line]))
+   [splunk-ui-cljs.input-text :as splunk.input-text]
+   [splunk-ui-cljs.line :as splunk.line]
+   [splunk-ui-cljs.button :as splunk.button]))
 
 
-(def input-text input-text/input-text)
-(def input-password input-text/input-password)
-(def line line/line)
+(def input-text splunk.input-text/input-text)
+(def input-password splunk.input-text/input-password)
+(def input-textarea splunk.input-text/input-textarea)
+
+(def line splunk.line/line)
+
+(def button splunk.button/button)
