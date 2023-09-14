@@ -10,12 +10,17 @@
   (utils/->default
    {:title     "Line"
     :component line
-    :args      {:size        2
-                :color       "gray"
-                :orientation "vertical"}
-    :argTypes  {:color       {:control "color"}
-                :orientation {:control "select"
-                              :options ["horizontal" "vertical"]}}}))
+    :argTypes  {:color       {:type        {:name "string" :required false}
+                              :description "A CSS color"
+                              :control     "color"}
+                :size        {:type        {:name "number" :required false}
+                              :description "The with of a line"
+                              :control     "number"}
+                :orientation {:type         {:name "string" :required false}
+                              :description  "Sets the orientation of this line"
+                              :defaultValue "horizontal"
+                              :control      "select"
+                              :options      ["horizontal" "vertical"]}}}))
 
 
 (defn ^:export line-vertical [args]
