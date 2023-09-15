@@ -2,118 +2,125 @@
   (:require
    ["react" :as react]
    [reagent.core :as r]
+   [goog.object :as go]
    [cljs-styled-components.reagent :refer-macros [defstyled]]
+   [splunk-ui-cljs.utils :as utils]
    ["@splunk/react-ui/Text" :default Text]
    ["@splunk/react-ui/TextArea" :default TextArea]))
 
 
-(defn assoc-some
-  "Associates a key k, with a value v in a map m, if and only if v is not nil."
-  ([m k v]
-   (if (nil? v) m (assoc m k v)))
-
-  ([m k v & kvs]
-   (reduce (fn [m [k v]] (assoc-some m k v))
-           (assoc-some m k v)
-           (partition 2 kvs))))
-
-
-(defn model->value
-  "Takes a value or an atom
-   If it's a value, returns it
-   If it's a Reagent object that supports IDeref, returns the value inside it by derefing"
-  [val-or-atom]
-  (if (satisfies? IDeref val-or-atom)
-    @val-or-atom
-    val-or-atom))
-
-
 (defstyled text-base Text
-  {:width #(let [width (unchecked-get % "$width")]
+  {:width #(let [width (go/get % "$width")]
              (if (number? width)
                (str width "px")
                width))})
 
 
 (defstyled textarea-base TextArea
-  {:width #(let [width (unchecked-get % "$width")]
+  {:width #(let [width (go/get % "$width")]
              (if (number? width)
                (str width "px")
                width))})
 
 
-(defn- input-text-base
-  "create input text component
-   model = r/atom
-   on-change = function to deal with state changes
-   input-type = type of input (html5) e.g. [text, password]"
-  [{:keys [model]}]
-  (let [initial-value  (model->value model)
-        external-state (r/atom initial-value)
-        local-state    (r/atom (if (nil? initial-value) "" initial-value))
-        input-ref      (react/createRef)
-        set-caret      (fn [start end]
-                         (when-let [input-element (.-current input-ref)]
-                           ;; dangerous hack to prevent jumping caret
-                           (js/setTimeout #(.setSelectionRange input-element start end))))]
-    (fn [{:keys [model on-change input-type disabled? placeholder status width validation-regex rows]
-          :or   {disabled? false input-type "text"}}]
-      (let [on-change-handler (fn [new-val]
-                                (reset! local-state new-val)
+(defn make-on-change-handler
+  [{:keys [external-state local-state validation-regex set-input-value on-change]}]
+  (fn [event]
+    (let [new-val (go/getValueByKeys event "target" "value")]
+      (if (or (not validation-regex)                        ;; no validation
+              (= new-val "")                                ;; allow to clear the input value
+              (and validation-regex                         ;; has validation and string matches regex
+                   (re-find validation-regex new-val)))
+        (do (reset! local-state new-val)
 
-                                (when (fn? on-change)
-                                  (let [has-done-fn? (= 2 (.-length ^js/Function on-change))
-                                        reset-fn     #(reset! external-state new-val)]
-                                    (if has-done-fn?
-                                      (on-change new-val reset-fn)
-                                      (do (on-change new-val)
-                                          (reset-fn))))))
-            latest-ext-value  (model->value model)
+            (when (fn? on-change)
+              (let [has-done-fn? (= 2 (go/get on-change "length"))
+                    reset-fn     #(reset! external-state @local-state)]
+                (if has-done-fn?
+                  (on-change @local-state reset-fn)
+                  (do (on-change @local-state)
+                      (reset-fn))))))
+        ;; if input didn't pass validation reset value to previous
+        (set-input-value @local-state)))))
+
+
+(defn- input-text-base
+  "Base input component implementation
+   - `model` (required) Sets the current value of input. Could be an atom holding a string value
+   - `on-change` (required) This is equivalent to onInput which is called on keydown, paste, and so on.
+      If value is set, this callback is required.
+      This must set the value prop to retain the change
+   - `disabled?` (optional) If true, user interaction is disabled
+   - `placeholder` (optional) The gray text shown when the input is empty
+   - `status` (optional) Highlight the field as having an error. Allowed value - :error
+   - `validation-regex` (optional) User input is only accepted if it would result in a string that matches this regular expression
+   - `rows` (optional) ONLY applies to 'input-textarea': the number of rows of text to show
+   - `width` (optional) Standard CSS width setting for this input
+   - `inline` (optional) When true, display as inline-flex with the default width (230px)
+  "
+  [{:keys [model]}]
+  (let [initial-value   (utils/model->value model)
+        external-state  (r/atom initial-value)
+        local-state     (r/atom (if (nil? initial-value) "" initial-value))
+        input-ref       (react/createRef)
+        set-input-value (fn [value]
+                          ;; as we're updating atoms there will be some re-rendering cycles
+                          ;; value should be updated after all of them
+                          ;; 20ms should be enough to wait to skip the current frame (60fps == 16ms)
+                          (js/setTimeout
+                           #(when-let [input (go/get input-ref "current")]
+                              (go/set input "value" value))
+                           20))]
+    (fn [{:keys [model on-change input-type disabled? placeholder status width validation-regex rows inline]
+          :or   {disabled? false input-type "text"}}]
+      (let [disabled?         (utils/model->value disabled?)
+            on-change-handler (make-on-change-handler
+                               {:external-state   external-state
+                                :local-state      local-state
+                                :validation-regex validation-regex
+                                :set-input-value  set-input-value
+                                :on-change        on-change})
+            latest-ext-value  (utils/model->value model)
+            status            (when (some? status)
+                                (keyword status))
             textarea?         (= input-type "textarea")
             base-component    (if textarea? textarea-base text-base)
-            base-props        {:onChange (fn [e]
-                                           (let [new-val (.. e -target -value)]
-                                             (when (or
-                                                    ;; no validation
-                                                    (not validation-regex)
-                                                    ;; allow to clear the input value
-                                                    (= new-val "")
-                                                    ;; has validation and string matches regex
-                                                    (and validation-regex (re-find validation-regex new-val)))
-                                               (let [caret-start (.. e -target -selectionStart)
-                                                     caret-end   (.. e -target -selectionEnd)]
-                                                 (on-change-handler new-val)
-                                                 (set-caret caret-start caret-end)))))
-                               :value    @local-state
-                               :inputRef input-ref
-                               :disabled disabled?
-                               :error    (= status :error)
-                               :$width   width}]
-
+            base-props        {:onChange     on-change-handler
+                               :defaultValue @local-state
+                               :inputRef     input-ref
+                               :disabled     disabled?
+                               :error        (= status :error)
+                               :$width       width}]
+        ;; Has model changed externally?
         (when (and (some? latest-ext-value)
-                   (not= @external-state latest-ext-value)) ;; Has model changed externally?
+                   (not= @external-state latest-ext-value))
           (reset! external-state latest-ext-value)
-          (reset! local-state latest-ext-value))
+          (reset! local-state latest-ext-value)
+          (set-input-value latest-ext-value))
 
-        [base-component (assoc-some base-props
+        [base-component (utils/assoc-some base-props
+                          :inline inline
                           :rowsMin (when textarea? rows)
                           :placeholder (when-not textarea? placeholder)
                           :type (when-not textarea? input-type))]))))
 
 
 (defn input-text
+  "An input for text"
   [props]
   [input-text-base
    (assoc props :input-type "text")])
 
 
 (defn input-password
+  "An input for secret values such as passwords"
   [props]
   [input-text-base
    (assoc props :input-type "password")])
 
 
 (defn input-textarea
+  "A multi-line input for text"
   [props]
   [input-text-base
    (-> props
