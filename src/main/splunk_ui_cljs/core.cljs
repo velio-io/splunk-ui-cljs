@@ -4,7 +4,8 @@
    [splunk-ui-cljs.line :as splunk.line]
    [splunk-ui-cljs.button :as splunk.button]
    [splunk-ui-cljs.checkbox :as splunk.checkbox]
-   [splunk-ui-cljs.dropdown :as splunk.dropdown]))
+   [splunk-ui-cljs.dropdown :as splunk.dropdown]
+   [splunk-ui-cljs.selection-list :as splunk.selection-list]))
 
 
 (def input-text splunk.input-text/input-text)
@@ -19,3 +20,4 @@
 
 (def single-dropdown splunk.dropdown/single-dropdown)
 (def tag-dropdown splunk.dropdown/tag-dropdown)
+(def selection-list splunk.selection-list/selection-list)
