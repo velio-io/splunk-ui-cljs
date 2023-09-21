@@ -52,7 +52,7 @@
                                 :control     "number"}}}))
 
 
-(defn ^:export selection-list-basic [args]
+(defn ^:export selection-list-multiselect [args]
   (let [checkbox-model (r/atom #{3 1})
         params         (-> args utils/->params)]
     (r/as-element
@@ -72,3 +72,58 @@
                                :width         400
                                :height        200}
                               params)]]])))
+
+
+(defn ^:export selection-list-required [args]
+  (let [checkbox-model (r/atom #{3 1})]
+    (r/as-element
+     [:> SplunkThemeProvider {:family "prisma" :colorScheme "light"}
+      [:div
+       [selection-list {:model     checkbox-model
+                        :on-change #(reset! checkbox-model %)
+                        :choices   [{:id 1 :label "First"}
+                                    {:id 2 :label "Second"}
+                                    {:id 3 :label "Third"}
+                                    {:id 4 :label "Forth"}
+                                    {:id 5 :label "Fifth"}
+                                    {:id 6 :label "Sixth"}
+                                    {:id 7 :label "Seventh"}
+                                    {:id 8 :label "Eighth"}]
+                        :required? true}]]])))
+
+
+(defn ^:export selection-list-as-checkboxes [args]
+  (let [checkbox-model (r/atom #{3 1})]
+    (r/as-element
+     [:> SplunkThemeProvider {:family "prisma" :colorScheme "light"}
+      [:div
+       [selection-list {:model      checkbox-model
+                        :on-change  #(reset! checkbox-model %)
+                        :choices    [{:id 1 :label "First"}
+                                     {:id 2 :label "Second"}
+                                     {:id 3 :label "Third"}
+                                     {:id 4 :label "Forth"}
+                                     {:id 5 :label "Fifth"}
+                                     {:id 6 :label "Sixth"}
+                                     {:id 7 :label "Seventh"}
+                                     {:id 8 :label "Eighth"}]
+                        :appearance "checkbox"}]]])))
+
+
+(defn ^:export selection-list-disabled [args]
+  (let [checkbox-model (r/atom #{3 1})]
+    (r/as-element
+     [:> SplunkThemeProvider {:family "prisma" :colorScheme "light"}
+      [:div
+       [selection-list {:model      checkbox-model
+                        :on-change  #(reset! checkbox-model %)
+                        :choices    [{:id 1 :label "First"}
+                                     {:id 2 :label "Second"}
+                                     {:id 3 :label "Third"}
+                                     {:id 4 :label "Forth"}
+                                     {:id 5 :label "Fifth"}
+                                     {:id 6 :label "Sixth"}
+                                     {:id 7 :label "Seventh"}
+                                     {:id 8 :label "Eighth"}]
+                        :appearance "checkbox"
+                        :disabled?  true}]]])))
