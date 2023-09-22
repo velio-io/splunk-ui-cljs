@@ -58,3 +58,53 @@
                                                     {:id "second" :label "Second"}
                                                     {:id "third" :label "Third"}]}
                                        params)]])))
+
+
+(defn ^:export single-dropdown-error [args]
+  (let [model (r/atom nil)]
+    (r/as-element
+     [:> SplunkThemeProvider {:family "prisma" :colorScheme "light"}
+      [dropdown/single-dropdown {:on-change #(reset! model %)
+                                 :model     model
+                                 :choices   [{:id "first" :label "First"}
+                                             {:id "second" :label "Second"}
+                                             {:id "third" :label "Third"}]
+                                 :status    :error}]])))
+
+
+(defn ^:export single-dropdown-disabled [args]
+  (let [model (r/atom nil)]
+    (r/as-element
+     [:> SplunkThemeProvider {:family "prisma" :colorScheme "light"}
+      [dropdown/single-dropdown {:on-change #(reset! model %)
+                                 :model     model
+                                 :choices   [{:id "first" :label "First"}
+                                             {:id "second" :label "Second"}
+                                             {:id "third" :label "Third"}]
+                                 :disabled? true}]])))
+
+
+(defn ^:export single-dropdown-filter [args]
+  (let [model (r/atom nil)]
+    (r/as-element
+     [:> SplunkThemeProvider {:family "prisma" :colorScheme "light"}
+      [dropdown/single-dropdown {:on-change   #(reset! model %)
+                                 :model       model
+                                 :choices     [{:id "first" :label "First"}
+                                               {:id "second" :label "Second"}
+                                               {:id "third" :label "Third"}]
+                                 :filter-box? true}]])))
+
+
+(defn ^:export single-dropdown-choice-functions [args]
+  (let [model (r/atom nil)]
+    (r/as-element
+     [:> SplunkThemeProvider {:family "prisma" :colorScheme "light"}
+      [dropdown/single-dropdown {:on-change   #(reset! model %)
+                                 :model       model
+                                 :choices     [{:my-id "first" :my-label "First"}
+                                               {:my-id "second" :my-label "Second Second SecondSecond SecondSecond Second" :truncate true}
+                                               {:my-id "third" :my-label "Third"}]
+                                 :id-fn       :my-id
+                                 :label-fn    :my-label
+                                 :placeholder "Select me"}]])))
