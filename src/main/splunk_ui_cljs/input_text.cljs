@@ -71,7 +71,8 @@
                            #(when-let [input (go/get input-ref "current")]
                               (go/set input "value" value))
                            20))]
-    (fn [{:keys [model on-change input-type disabled? placeholder status width validation-regex rows inline]
+    (fn [{:keys [model on-change input-type disabled? placeholder status width validation-regex rows
+                 inline append prepend labelledBy labelText id]
           :or   {disabled? false input-type "text"}}]
       (let [disabled?         (utils/model->value disabled?)
             on-change-handler (make-on-change-handler
@@ -102,7 +103,12 @@
                           :inline inline
                           :rowsMin (when textarea? rows)
                           :placeholder (when-not textarea? placeholder)
-                          :type (when-not textarea? input-type))]))))
+                          :type (when-not textarea? input-type)
+                          :append append
+                          :prepend prepend
+                          :labelledBy labelledBy
+                          :labelText labelText
+                          :id id)]))))
 
 
 (defn input-text

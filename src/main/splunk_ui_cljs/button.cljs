@@ -17,12 +17,19 @@
    - `disabled?` (optional) Prevents user from clicking the button
    - `on-click` (optional) Callback triggered on user click
    - `to` (optional) Identifies the URL for a link. If set, Splunk UI applies an <a> tag instead of a <button> tag"
-  [{:keys [label appearance disabled? on-click to]
+  [{:keys [label appearance disabled? on-click to inline append prepend labelledBy labelText id]
     :or   {appearance "default"}}]
   (let [disabled? (utils/model->value disabled?)]
     [button-base
-     (utils/assoc-some {:label      label
-                        :appearance appearance
-                        :disabled   disabled?
-                        :onClick    on-click}
-       :to to)]))
+     (utils/assoc-some
+       {:label      label
+        :appearance appearance
+        :disabled   disabled?
+        :onClick    on-click}
+       :to to
+       :inline inline
+       :append append
+       :prepend prepend
+       :labelledBy labelledBy
+       :labelText labelText
+       :id id)]))

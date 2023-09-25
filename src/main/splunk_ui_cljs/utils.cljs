@@ -20,3 +20,13 @@
   (if (satisfies? IDeref val-or-atom)
     @val-or-atom
     val-or-atom))
+
+
+(defn ->js-shallow
+  "Convert cljs map into js but only a first level"
+  [clj-data]
+  (let [js-data (js-obj)]
+    (doseq [[k v] clj-data
+            :let [key (name k)]]
+      (unchecked-set js-data key v))
+    js-data))

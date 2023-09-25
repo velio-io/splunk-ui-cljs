@@ -78,8 +78,10 @@
    - `filter-box?` (optional) Determines whether to show the filter box. When true, the children are automatically filtered based on the label.
    - `disabled?` (optional) If true, user interaction is disabled
    - `placeholder` (optional) The gray text shown when the dropdown is empty
-   - `status` (optional) Highlight the field as having an error"
-  [{:keys [model choices on-change status disabled? placeholder filter-box? id-fn label-fn]
+   - `status` (optional) Highlight the field as having an error
+   - `inline` (optional) Make the control an inline block with variable width."
+  [{:keys [model choices on-change status disabled? placeholder filter-box? id-fn label-fn
+           inline append prepend labelledBy labelText id]
     :or   {disabled?   false
            filter-box? false
            label-fn    :label
@@ -107,5 +109,11 @@
          :error    (= status :error)}
         :placeholder placeholder
         :disabled disabled?
-        :filter filter-box?)]
+        :filter filter-box?
+        :inline inline
+        :append append
+        :prepend prepend
+        :labelledBy labelledBy
+        :labelText labelText
+        :id id)]
      options)))
