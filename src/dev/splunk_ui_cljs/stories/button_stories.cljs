@@ -2,6 +2,10 @@
   (:require
    [reagent.core :as r]
    ["@splunk/themes" :refer [SplunkThemeProvider]]
+   ["@splunk/react-icons/Bug" :default Bug]
+   ["@splunk/react-icons/ArrowClockwise" :default ArrowClockwise]
+   ["@splunk/react-icons/ControlPlay" :default ControlPlay]
+   ["@splunk/react-icons/ControlPause" :default ControlPause]
    [splunk-ui-cljs.stories.utils :as utils]
    [splunk-ui-cljs.button :refer [button]]))
 
@@ -27,6 +31,9 @@
                              :control     {:type nil}}
                 :to         {:type        {:name "string" :required false}
                              :description "Identifies the URL for a link. If set, Splunk UI applies an <a> tag instead of a <button> tag"
+                             :control     "text"}
+                :icon       {:type        {:name "string" :required false}
+                             :description "Hiccup vector or any valid React element to show the icon"
                              :control     "text"}}}))
 
 
@@ -80,3 +87,13 @@
      [button {:label      "link"
               :appearance :primary
               :to         "https://some-link.com"}]]]))
+
+
+(defn ^:export button-with-icon [args]
+  (r/as-element
+   [:> SplunkThemeProvider {:family "prisma" :colorScheme "light"}
+    [:div {:style {:display "flex" :justify-content "space-between"}}
+     [button {:icon [:> Bug]}]
+     [button {:icon [:> ArrowClockwise] :appearance :primary}]
+     [button {:icon [:> ControlPlay] :label "Play"}]
+     [button {:icon [:> ControlPause] :label "Pause" :appearance :primary}]]]))
