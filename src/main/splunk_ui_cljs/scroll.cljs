@@ -1,6 +1,6 @@
 (ns splunk-ui-cljs.scroll
   (:require
-   [reagent.core :as reagent]
+   [reagent.core :as r]
    [goog.object :as go]
    [cljs-styled-components.reagent :refer-macros [defstyled]]
    [splunk-ui-cljs.utils :as utils]
@@ -35,7 +35,7 @@
    - `max-width` (optional) Standard CSS max-width setting for this component. Could be number or string
    - `max-height` (optional) Standard CSS max-height setting for this component. Could be number or string"
   [{:keys [tag width height min-width min-height max-width max-height]}]
-  (let [component (reagent/current-component)]
+  (let [component (r/current-component)]
     [scroller-base
      (utils/assoc-some {}
        :tagName tag
@@ -45,4 +45,4 @@
        :$min-height min-height
        :$max-width max-width
        :$max-height max-height)
-     (reagent/children component)]))
+     (r/children component)]))

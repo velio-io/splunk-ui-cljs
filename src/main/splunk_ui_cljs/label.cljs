@@ -1,12 +1,12 @@
 (ns splunk-ui-cljs.label
   (:require
-   [reagent.core :as reagent]
+   [reagent.core :as r]
    [splunk-ui-cljs.utils :as utils]
    ["@splunk/react-ui/ControlGroup" :default ControlGroup]))
 
 
 (def control-group
-  (reagent/adapt-react-class ControlGroup))
+  (r/adapt-react-class ControlGroup))
 
 
 (defn label
@@ -24,9 +24,9 @@
    - `tooltip-placement` (optional) If a tooltip is provided, sets its default placement."
   [{:keys [layout status help label label-for position label-width
            required? size tooltip tooltip-placement]}]
-  (let [component (reagent/current-component)
+  (let [component (r/current-component)
         help      (if (vector? help)
-                    (reagent/as-element help)
+                    (r/as-element help)
                     help)
         status    (when (some? status)
                     (keyword status))]
@@ -48,7 +48,7 @@
      ;; because of ControlGroup internal logic
      ;; ControlGroup will modify its children elements and will provide some additional properties to it
      (map #(let [[comp props] %]
-             (reagent/create-element
-              (reagent/reactify-component comp)
+             (r/create-element
+              (r/reactify-component comp)
               (utils/->js-shallow props))))
-     (reagent/children component))))
+     (r/children component))))
