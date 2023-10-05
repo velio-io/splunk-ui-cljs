@@ -19,6 +19,9 @@
                                                  If value is set, this callback is required.
                                                  This must set the value prop to retain the change"
                                    :control     {:type nil}}
+                :change-on-blur?  {:type        {:name "boolean" :required false}
+                                   :description "Default is true. when true. Invoke :on-change function on blur, otherwise on every change (character by character)"
+                                   :control     "boolean"}
                 :disabled?        {:type        {:name "boolean" :required false}
                                    :description "If true, user interaction is disabled"
                                    :control     "boolean"}

@@ -7,7 +7,8 @@
    [splunk-ui-cljs.dropdown :as splunk.dropdown]
    [splunk-ui-cljs.selection-list :as splunk.selection-list]
    [splunk-ui-cljs.label :as splunk.label]
-   [splunk-ui-cljs.scroll :as splunk.scroll]))
+   [splunk-ui-cljs.scroll :as splunk.scroll]
+   [splunk-ui-cljs.layout :as splunk.layout]))
 
 
 (def input-text splunk.input-text/input-text)
@@ -27,3 +28,10 @@
 (def label splunk.label/label)
 
 (def scroller splunk.scroll/scroller)
+
+(def row splunk.layout/row)
+(def column splunk.layout/column)
+
+(def layout splunk.layout/layout)
+(def h-box splunk.layout/h-box)
+(def v-box splunk.layout/v-box)

@@ -24,24 +24,15 @@
 
 
 (defn make-on-change-handler
-  [{:keys [external-state local-state validation-regex set-input-value on-change]}]
-  (fn [event]
-    (let [new-val (go/getValueByKeys event "target" "value")]
-      (if (or (not validation-regex)                        ;; no validation
-              (= new-val "")                                ;; allow to clear the input value
-              (and validation-regex                         ;; has validation and string matches regex
-                   (re-find validation-regex new-val)))
-        (do (reset! local-state new-val)
-
-            (when (fn? on-change)
-              (let [has-done-fn? (= 2 (go/get on-change "length"))
-                    reset-fn     #(reset! external-state @local-state)]
-                (if has-done-fn?
-                  (on-change @local-state reset-fn)
-                  (do (on-change @local-state)
-                      (reset-fn))))))
-        ;; if input didn't pass validation reset value to previous
-        (set-input-value @local-state)))))
+  [{:keys [external-state local-state on-change]}]
+  (fn []
+    (when (fn? on-change)
+      (let [has-done-fn? (= 2 (go/get on-change "length"))
+            reset-fn     #(reset! external-state @local-state)]
+        (if has-done-fn?
+          (on-change @local-state reset-fn)
+          (do (on-change @local-state)
+              (reset-fn)))))))
 
 
 (defn- input-text-base
@@ -50,14 +41,14 @@
    - `on-change` (required) This is equivalent to onInput which is called on keydown, paste, and so on.
       If value is set, this callback is required.
       This must set the value prop to retain the change
+   - `change-on-blur?` (optional) Default is true. when true. Invoke :on-change function on blur, otherwise on every change (character by character)
    - `disabled?` (optional) If true, user interaction is disabled
    - `placeholder` (optional) The gray text shown when the input is empty
    - `status` (optional) Highlight the field as having an error. Allowed value - :error
    - `validation-regex` (optional) User input is only accepted if it would result in a string that matches this regular expression
    - `rows` (optional) ONLY applies to 'input-textarea': the number of rows of text to show
    - `width` (optional) Standard CSS width setting for this input
-   - `inline` (optional) When true, display as inline-flex with the default width (230px)
-  "
+   - `inline` (optional) When true, display as inline-flex with the default width (230px)"
   [{:keys [model]}]
   (let [initial-value   (utils/model->value model)
         external-state  (r/atom initial-value)
@@ -71,22 +62,34 @@
                            #(when-let [input (go/get input-ref "current")]
                               (go/set input "value" value))
                            20))]
-    (fn [{:keys [model on-change input-type disabled? placeholder status width validation-regex rows
-                 inline append prepend labelledBy labelText id]
-          :or   {disabled? false input-type "text"}}]
+    (fn [{:keys [model on-change change-on-blur? input-type disabled? placeholder status width
+                 validation-regex rows inline append prepend labelledBy labelText id]
+          :or   {disabled? false input-type "text" change-on-blur? true}}]
       (let [disabled?         (utils/model->value disabled?)
             on-change-handler (make-on-change-handler
-                               {:external-state   external-state
-                                :local-state      local-state
-                                :validation-regex validation-regex
-                                :set-input-value  set-input-value
-                                :on-change        on-change})
+                               {:external-state external-state
+                                :local-state    local-state
+                                :on-change      on-change})
             latest-ext-value  (utils/model->value model)
             status            (when (some? status)
                                 (keyword status))
             textarea?         (= input-type "textarea")
             base-component    (if textarea? textarea-base text-base)
-            base-props        {:onChange     on-change-handler
+            base-props        {:onChange     (fn [event]
+                                               (let [new-val (go/getValueByKeys event "target" "value")]
+                                                 (if (or (not validation-regex) ;; no validation
+                                                         (= new-val "") ;; allow to clear the input value
+                                                         (and validation-regex ;; has validation and string matches regex
+                                                              (re-find validation-regex new-val)))
+                                                   (do (reset! local-state new-val)
+                                                       (when-not change-on-blur?
+                                                         (on-change-handler)))
+                                                   ;; if input didn't pass validation reset value to previous
+                                                   (set-input-value @local-state))))
+                               :onBlur       (fn [_event]
+                                               (when (and change-on-blur?
+                                                          (not= @local-state @external-state))
+                                                 (on-change-handler)))
                                :defaultValue @local-state
                                :inputRef     input-ref
                                :disabled     disabled?
