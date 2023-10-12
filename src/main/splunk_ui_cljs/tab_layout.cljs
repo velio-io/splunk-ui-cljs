@@ -46,12 +46,8 @@
                          :panelId id}
                         :style style
                         :disabled disabled
-                        :tooltip (if (vector? tooltip)
-                                   (r/as-element tooltip)
-                                   tooltip)
-                        :icon (if (vector? icon)
-                                (r/as-element icon)
-                                icon))
+                        :tooltip (utils/value->element tooltip)
+                        :icon (utils/value->element icon))
              (if (fn? content)
                (content)
                content)]))
