@@ -25,9 +25,7 @@
   [{:keys [layout status help label label-for position label-width
            required? size tooltip tooltip-placement]}]
   (let [component (r/current-component)
-        help      (if (vector? help)
-                    (r/as-element help)
-                    help)
+        help      (utils/value->element help)
         status    (when (some? status)
                     (keyword status))]
     (into

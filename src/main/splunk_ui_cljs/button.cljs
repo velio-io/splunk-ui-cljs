@@ -21,9 +21,7 @@
   [{:keys [label appearance disabled? on-click to inline append prepend labelledBy labelText id icon]
     :or   {appearance "default"}}]
   (let [disabled?      (utils/model->value disabled?)
-        icon-component (if (vector? icon)
-                         (r/as-element icon)
-                         icon)]
+        icon-component (utils/value->element icon)]
     [button-base
      (utils/assoc-some
        {:label      label

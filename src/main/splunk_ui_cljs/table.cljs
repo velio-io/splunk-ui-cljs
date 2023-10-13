@@ -55,7 +55,11 @@
    - `on-row-toggle` (optional) An event handler for toggle of the row. resize of columns. The function is passed the original row map.
    - `on-all-rows-toggle` (optional) Callback invoked when a user clicks the row selection toggle in the header.
    - `expansion-row` (optional) Function which returns an optional row that is displayed when this row is expanded, or an array of rows.
-   - `on-expansion` (optional) An event handler that triggers when the row expansion element is selected."
+   - `on-expansion` (optional) An event handler that triggers when the row expansion element is selected.
+   - `actions` (optional) Adds table-level actions. Vector of reagent components or react elements. Not compatible with on-resize-column.
+   - `actions-column-width` (optional) Specifies the width of the actions column. Adds an empty header for row actions if no table-level actions are present.
+   - `row-action-primary` (optional) Adds primary actions. Reagent component or react element. For best results, use an icon-only button style. The onClick handler of each action is passed the event and the data prop of this row.
+   - `row-actions-secondary` (optional) Adds a secondary actions dropdown menu. Reagent component or react element. This prop must be a Menu. The onClick handler of each action is passed the event and the data prop of this row."
   [{:keys [sort-key sort-dir]
     :or   {sort-dir "asc"}}]
   (let [local-state (r/atom {:sort-key sort-key
@@ -63,7 +67,8 @@
     (fn [{:keys [model stripe-rows head-type inner-style dock-offset dock-scroll-bar row-expansion
                  on-move-row on-move-column on-resize-column resizable-fill-layout
                  columns on-col-menu-click sort-key sort-dir on-sort
-                 row-key on-row-click on-row-toggle on-all-rows-toggle expansion-row on-expansion]}]
+                 row-key on-row-click on-row-toggle on-all-rows-toggle expansion-row on-expansion
+                 actions actions-column-width row-action-primary row-actions-secondary]}]
       (let [rows             (utils/model->value model)
             columns          (utils/model->value columns)
             {local-sort-key :sort-key local-sort-dir :sort-dir} @local-state
@@ -100,7 +105,10 @@
                                                    (not= "all")
                                                    (on-all-rows-toggle)))
                     :rowSelection (when all-rows-toggle?
-                                    (rows-selection rows)))
+                                    (rows-selection rows))
+                    :actions (when (some? actions)
+                               (mapv utils/value->element actions))
+                    :actionsColumnWidth actions-column-width)
          [:> Head
           (doall
            (for [{:keys [id header-label align menu-items width] col-sort-key :sort-key} columns]
@@ -163,12 +171,12 @@
                                                   (fn [_event _data]
                                                     (on-row-toggle row)))
                                :selected (:selected row)
-                               :expansionRow (if (vector? expansion)
-                                               (r/as-element expansion)
-                                               expansion)
+                               :expansionRow (utils/value->element expansion)
                                :onExpansion (when (fn? on-expansion)
                                               #(on-expansion row))
-                               :expanded expanded)]
+                               :expanded expanded
+                               :actionPrimary (utils/value->element row-action-primary)
+                               :actionsSecondary (utils/value->element row-actions-secondary))]
                [:> Row row-props
                 (doall
                  (for [{:keys [id align]} columns]

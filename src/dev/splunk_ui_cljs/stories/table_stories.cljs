@@ -3,6 +3,12 @@
    [reagent.core :as r]
    ["@splunk/themes" :refer [SplunkThemeProvider]]
    ["@splunk/react-ui/Paragraph" :default P]
+   ["@splunk/react-icons/enterprise/Gear" :default Gear]
+   ["@splunk/react-icons/enterprise/Pencil" :default Pencil]
+   ["@splunk/react-ui/Button" :default Button]
+   ["@splunk/react-ui/Tooltip" :default Tooltip]
+   ["@splunk/react-ui/Dropdown" :default Dropdown]
+   ["@splunk/react-ui/Menu" :default Menu :refer [Heading Item Divider]]
    [splunk-ui-cljs.stories.utils :as utils]
    [splunk-ui-cljs.table :refer [table] :as splunk.table]))
 
@@ -88,6 +94,18 @@
                                         :control     {:type nil}}
                 :on-expansion          {:type        {:name "function" :required false}
                                         :description "An event handler that triggers when the row expansion element is selected."
+                                        :control     {:type nil}}
+                :actions               {:type        {:name "vector" :required false}
+                                        :description "Adds table-level actions. Vector of reagent components or react elements. Not compatible with on-resize-column."
+                                        :control     {:type nil}}
+                :actions-column-width  {:type        {:name "number" :required false}
+                                        :description "Specifies the width of the actions column. Adds an empty header for row actions if no table-level actions are present."
+                                        :control     "number"}
+                :row-action-primary    {:type        {:name "element" :required false}
+                                        :description "Adds primary actions. Reagent component or react element. For best results, use an icon-only button style. The onClick handler of each action is passed the event and the data prop of this row."
+                                        :control     {:type nil}}
+                :row-actions-secondary {:type        {:name "element" :required false}
+                                        :description "Adds a secondary actions dropdown menu. Reagent component or react element. This prop must be a Menu. The onClick handler of each action is passed the event and the data prop of this row."
                                         :control     {:type nil}}}}))
 
 
@@ -454,3 +472,58 @@
          :row-key               :email
          :on-resize-column      resize-column
          :resizable-fill-layout true}]]])))
+
+
+(defn ^:export table-actions [args]
+  (let [model   (r/atom [{:name "Rylan", :age 42, :email "Angelita_Weimann42@gmail.com"},
+                         {:name "Amelia", :age 24, :email "Dexter.Trantow57@hotmail.com"},
+                         {:name "Estevan", :age 56, :email "Aimee7@hotmail.com"},
+                         {:name "Florence", :age 71, :email "Jarrod.Bernier13@yahoo.com"},
+                         {:name "Tressa", :age 38, :email "Yadira1@hotmail.com"},
+                         {:name "Bernice", :age 41 :email "bernice.Gilbert@gmail.com"},])
+        columns (r/atom [{:id :name :header-label "Name"}
+                         {:id :age :header-label "Age"}
+                         {:id :email :header-label "Email"}])]
+    (r/as-element
+     [:> SplunkThemeProvider {:family "prisma" :colorScheme "light"}
+      [table
+       {:model                 model
+        :columns               columns
+        :row-key               :email
+        :actions-column-width  120
+
+        :actions               [[:> Dropdown {:toggle (r/as-element
+                                                       [:> Button {:appearance "secondary"
+                                                                   :icon       (r/as-element
+                                                                                [:> Gear {:hideDefaultTooltip true}])}])
+                                              :key    "settings"}
+                                 [:> Menu
+                                  [:> Heading "Show/Hide Columns"]
+                                  [:> Item {:key        :name
+                                            :selectable true
+                                            :selected   true}
+                                   "Name"]
+                                  [:> Item {:key        :age
+                                            :selectable true
+                                            :selected   true}
+                                   "Age"]
+                                  [:> Item {:key        :email
+                                            :selectable true
+                                            :selected   true}
+                                   "Email"]
+                                  [:> Divider]
+                                  [:> Heading "More actions"]
+                                  [:> Item "Add new item"]]]]
+
+        :row-action-primary    [:> Tooltip {:content             "Edit"
+                                            :contentRelationship "label"
+                                            :style               {:marginRight 8}}
+                                [:> Button {:appearance "secondary"
+                                            :icon       (r/as-element
+                                                         [:> Pencil {:hideDefaultTooltip true}])}]]
+
+        :row-actions-secondary [:> Menu
+                                [:> Item "Save"]
+                                [:> Item "Add"]
+                                [:> Item "Delete"]]}]])))
+

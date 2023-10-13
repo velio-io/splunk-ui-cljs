@@ -1,4 +1,5 @@
-(ns splunk-ui-cljs.utils)
+(ns splunk-ui-cljs.utils
+  (:require [reagent.core :as r]))
 
 
 (defn assoc-some
@@ -30,3 +31,11 @@
             :let [key (name k)]]
       (unchecked-set js-data key v))
     js-data))
+
+
+(defn value->element
+  "Helper function to map reagent components to react elements"
+  [value]
+  (if (vector? value)
+    (r/as-element value)
+    value))
