@@ -475,13 +475,13 @@
 
 
 (defn ^:export table-actions [args]
-  (let [model   (r/atom [{:name "Rylan", :age 42, :email "Angelita_Weimann42@gmail.com"},
-                         {:name "Amelia", :age 24, :email "Dexter.Trantow57@hotmail.com"},
-                         {:name "Estevan", :age 56, :email "Aimee7@hotmail.com"},
-                         {:name "Florence", :age 71, :email "Jarrod.Bernier13@yahoo.com"},
-                         {:name "Tressa", :age 38, :email "Yadira1@hotmail.com"},
-                         {:name "Bernice", :age 41 :email "bernice.Gilbert@gmail.com"},])
-        columns (r/atom [{:id :name :header-label "Name"}
+  (let [model   (r/atom [{:user-name "Rylan", :age 42, :email "Angelita_Weimann42@gmail.com"},
+                         {:user-name "Amelia", :age 24, :email "Dexter.Trantow57@hotmail.com"},
+                         {:user-name "Estevan", :age 56, :email "Aimee7@hotmail.com"},
+                         {:user-name "Florence", :age 71, :email "Jarrod.Bernier13@yahoo.com"},
+                         {:user-name "Tressa", :age 38, :email "Yadira1@hotmail.com"},
+                         {:user-name "Bernice", :age 41 :email "bernice.Gilbert@gmail.com"},])
+        columns (r/atom [{:id :user-name :header-label "Name"}
                          {:id :age :header-label "Age"}
                          {:id :email :header-label "Email"}])]
     (r/as-element
@@ -517,7 +517,9 @@
 
         :row-action-primary    [:> Tooltip {:content             "Edit"
                                             :contentRelationship "label"
-                                            :style               {:marginRight 8}}
+                                            :style               {:marginRight 8}
+                                            :on-click            (fn [_ row]
+                                                                   (println row))}
                                 [:> Button {:appearance "secondary"
                                             :icon       (r/as-element
                                                          [:> Pencil {:hideDefaultTooltip true}])}]]

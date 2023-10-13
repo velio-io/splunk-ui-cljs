@@ -177,7 +177,7 @@
                                :expanded expanded
                                :actionPrimary (utils/value->element row-action-primary)
                                :actionsSecondary (utils/value->element row-actions-secondary))]
-               [:> Row row-props
+               [:r> Row (clj->js row-props)
                 (doall
                  (for [{:keys [id align]} columns]
                    ^{:key id}
