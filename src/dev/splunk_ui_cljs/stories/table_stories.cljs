@@ -518,7 +518,7 @@
         :row-action-primary    [:> Tooltip {:content             "Edit"
                                             :contentRelationship "label"
                                             :style               {:marginRight 8}
-                                            :on-click            (fn [_ row]
+                                            :on-click            (fn [row]
                                                                    (println row))}
                                 [:> Button {:appearance "secondary"
                                             :icon       (r/as-element
