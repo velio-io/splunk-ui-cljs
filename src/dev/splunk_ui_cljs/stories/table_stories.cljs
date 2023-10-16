@@ -525,7 +525,7 @@
                                                          [:> Pencil {:hideDefaultTooltip true}])}]]
 
         :row-actions-secondary [:> Menu
-                                [:> Item "Save"]
-                                [:> Item "Add"]
-                                [:> Item "Delete"]]}]])))
+                                [:> Item {:on-click (fn [data] (println "save" data))} "Save"]
+                                [:> Item {:on-click (fn [data] (println "add" data))} "Add"]
+                                [:> Item {:on-click (fn [data] (println "delete" data))} "Delete"]]}]])))
 

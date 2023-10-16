@@ -53,6 +53,41 @@
     action))
 
 
+(defn prep-menu-action [row action]
+  (if (vector? action)
+    (let [first-element   (first action)
+          prep-row-action (partial prep-action row)]
+      (cond
+        ;; native component e.g. [:> Menu ...]
+        (keyword? first-element)
+        (let [[tag component props & children] action
+              children' (if (map? props)
+                          (->> children
+                               (map prep-row-action)
+                               (cons props))
+                          ;; no props passed
+                          (->> children
+                               (concat [props])
+                               (map prep-row-action)))]
+          (into [tag component] children'))
+
+        (fn? first-element)
+        ;; reagent component e.g. [menu ...]
+        (let [[component props & children] action
+              children' (if (map? props)
+                          (->> children
+                               (map prep-row-action)
+                               (cons props))
+                          ;; no props passed
+                          (->> children
+                               (concat [props])
+                               (map prep-row-action)))]
+          (into [component] children'))
+
+        :otherwise action))
+    action))
+
+
 (defn table
   "A styled table component.
    - `model` (required) Collection of table rows (vector of maps). One element for each row in the table. Can contain any data with some special keys :selected, :expanded
@@ -204,7 +239,7 @@
                                               #(on-expansion row))
                                :expanded expanded
                                :actionPrimary (->> row-action-primary (prep-action row) utils/value->element)
-                               :actionsSecondary (utils/value->element row-actions-secondary))]
+                               :actionsSecondary (->> row-actions-secondary (prep-menu-action row) utils/value->element))]
                [:> Row row-props
                 (doall
                  (for [{:keys [id align]} columns]

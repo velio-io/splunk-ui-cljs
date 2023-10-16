@@ -10,7 +10,8 @@
    [splunk-ui-cljs.scroll :as splunk.scroll]
    [splunk-ui-cljs.layout :as splunk.layout]
    [splunk-ui-cljs.table :as splunk.table]
-   [splunk-ui-cljs.tab-layout :as splunk.tab-layout]))
+   [splunk-ui-cljs.tab-layout :as splunk.tab-layout]
+   [splunk-ui-cljs.message :as splunk.message]))
 
 
 (def input-text splunk.input-text/input-text)
@@ -42,3 +43,7 @@
 (def table splunk.table/table)
 
 (def tab-layout splunk.tab-layout/tab-layout)
+
+(def message splunk.message/message)
+(def message-link splunk.message/message-link)
+(def message-title splunk.message/message-title)
