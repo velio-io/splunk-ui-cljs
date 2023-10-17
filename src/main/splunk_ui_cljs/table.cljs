@@ -25,6 +25,69 @@
       :otherwise "some")))
 
 
+(defn prep-action [row action]
+  (if (vector? action)
+    (let [first-element (first action)]
+      (cond
+        ;; native component e.g. [:> Button {} "send"]
+        (keyword? first-element)
+        (let [[tag component props & children] action]
+          (if (and (map? props)
+                   (or (:onClick props) (:on-click props)))
+            (let [handler   (or (:onClick props) (:on-click props))
+                  new-props (assoc props :on-click #(handler row))]
+              (into [tag component new-props] children))
+            action))
+
+        (fn? first-element)
+        ;; reagent component e.g. [button {} "send"]
+        (let [[component props & children] action]
+          (if (and (map? props)
+                   (or (:onClick props) (:on-click props)))
+            (let [handler   (or (:onClick props) (:on-click props))
+                  new-props (assoc props :on-click #(handler row))]
+              (into [component new-props] children))
+            action))
+
+        :otherwise action))
+    action))
+
+
+(defn prep-menu-action [row action]
+  (if (vector? action)
+    (let [first-element   (first action)
+          prep-row-action (partial prep-action row)]
+      (cond
+        ;; native component e.g. [:> Menu ...]
+        (keyword? first-element)
+        (let [[tag component props & children] action
+              children' (if (map? props)
+                          (->> children
+                               (map prep-row-action)
+                               (cons props))
+                          ;; no props passed
+                          (->> children
+                               (concat [props])
+                               (map prep-row-action)))]
+          (into [tag component] children'))
+
+        (fn? first-element)
+        ;; reagent component e.g. [menu ...]
+        (let [[component props & children] action
+              children' (if (map? props)
+                          (->> children
+                               (map prep-row-action)
+                               (cons props))
+                          ;; no props passed
+                          (->> children
+                               (concat [props])
+                               (map prep-row-action)))]
+          (into [component] children'))
+
+        :otherwise action))
+    action))
+
+
 (defn table
   "A styled table component.
    - `model` (required) Collection of table rows (vector of maps). One element for each row in the table. Can contain any data with some special keys :selected, :expanded
@@ -58,8 +121,8 @@
    - `on-expansion` (optional) An event handler that triggers when the row expansion element is selected.
    - `actions` (optional) Adds table-level actions. Vector of reagent components or react elements. Not compatible with on-resize-column.
    - `actions-column-width` (optional) Specifies the width of the actions column. Adds an empty header for row actions if no table-level actions are present.
-   - `row-action-primary` (optional) Adds primary actions. Reagent component or react element. For best results, use an icon-only button style. The onClick handler of each action is passed the event and the data prop of this row.
-   - `row-actions-secondary` (optional) Adds a secondary actions dropdown menu. Reagent component or react element. This prop must be a Menu. The onClick handler of each action is passed the event and the data prop of this row."
+   - `row-action-primary` (optional) Adds primary actions. Reagent component or react element. For best results, use an icon-only button style. The :on-click handler of each action is passed the data prop of this row.
+   - `row-actions-secondary` (optional) Adds a secondary actions dropdown menu. Reagent component or react element. This prop must be a Menu. The :on-click handler of each action is passed the event and the data prop of this row."
   [{:keys [sort-key sort-dir]
     :or   {sort-dir "asc"}}]
   (let [local-state (r/atom {:sort-key sort-key
@@ -175,8 +238,8 @@
                                :onExpansion (when (fn? on-expansion)
                                               #(on-expansion row))
                                :expanded expanded
-                               :actionPrimary (utils/value->element row-action-primary)
-                               :actionsSecondary (utils/value->element row-actions-secondary))]
+                               :actionPrimary (->> row-action-primary (prep-action row) utils/value->element)
+                               :actionsSecondary (->> row-actions-secondary (prep-menu-action row) utils/value->element))]
                [:> Row row-props
                 (doall
                  (for [{:keys [id align]} columns]
