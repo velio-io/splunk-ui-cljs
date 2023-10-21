@@ -12,7 +12,8 @@
    [splunk-ui-cljs.table :as splunk.table]
    [splunk-ui-cljs.tab-layout :as splunk.tab-layout]
    [splunk-ui-cljs.message :as splunk.message]
-   [splunk-ui-cljs.modal :as splunk.modal]))
+   [splunk-ui-cljs.modal :as splunk.modal]
+   [splunk-ui-cljs.cards :as splunk.cards]))
 
 
 (def input-text splunk.input-text/input-text)
@@ -53,3 +54,8 @@
 (def modal-header splunk.modal/header)
 (def modal-body splunk.modal/body)
 (def modal-footer splunk.modal/footer)
+
+(def card splunk.cards/card)
+(def card-header splunk.cards/header)
+(def card-body splunk.cards/body)
+(def card-footer splunk.cards/footer)
