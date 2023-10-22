@@ -1,28 +1,8 @@
 (ns splunk-ui-cljs.layout
   (:require
    [reagent.core :as r]
-   [reagent.impl.util :as util]
-   [goog.object :as go]
    [splunk-ui-cljs.utils :as utils]
    ["@splunk/react-ui/ColumnLayout" :default ColumnLayout :refer [Column Row]]))
-
-
-(defn extract-props [v]
-  (let [p (nth v 1 nil)]
-    (if (map? p) p)))
-
-
-(defn component-props
-  "Copy of the reagent/component-props function with small addition.
-   We wouldn't choose between cljs or js properties but will merge them together instead.
-   This is required to handle additional props passed to React.cloneElement function"
-  [component]
-  (let [props (go/get component "props")]
-    (if-some [argv (go/get props "argv")]
-      ;; we have to merge props provided by React.cloneElement, otherwise they will be thrown away
-      (merge (extract-props argv)
-             (util/shallow-obj-to-map props))
-      (util/shallow-obj-to-map props))))
 
 
 (def column-layout
@@ -58,7 +38,7 @@
    - `align-items` (optional) Set vertical alignment of columns in a row."
   [{:keys [align-items]}]
   (let [component (r/current-component)
-        {:keys [gutter divider isFirstChild isLastChild]} (component-props component)
+        {:keys [gutter divider isFirstChild isLastChild]} (utils/component-props component)
         row-props (utils/assoc-some
                     {:gutter       gutter
                      :isFirstChild isFirstChild
@@ -83,7 +63,7 @@
    Should be a direct child of layout component"
   [_props]
   (let [component (r/current-component)
-        {:keys [gutter divider isFirstChild isLastChild]} (component-props component)
+        {:keys [gutter divider isFirstChild isLastChild]} (utils/component-props component)
         row-props (utils/assoc-some
                     {:gutter       gutter
                      :isFirstChild isFirstChild

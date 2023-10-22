@@ -1,5 +1,8 @@
 (ns splunk-ui-cljs.utils
-  (:require [reagent.core :as r]))
+  (:require
+   [reagent.core :as r]
+   [reagent.impl.util :as util]
+   [goog.object :as go]))
 
 
 (defn assoc-some
@@ -31,6 +34,24 @@
             :let [key (name k)]]
       (unchecked-set js-data key v))
     js-data))
+
+
+(defn extract-props [v]
+  (let [p (nth v 1 nil)]
+    (if (map? p) p)))
+
+
+(defn component-props
+  "Copy of the reagent/component-props function with small addition.
+   We wouldn't choose between cljs or js properties but will merge them together instead.
+   This is required to handle additional props passed to React.cloneElement function"
+  [component]
+  (let [props (go/get component "props")]
+    (if-some [argv (go/get props "argv")]
+      ;; we have to merge props provided by React.cloneElement, otherwise they will be thrown away
+      (merge (extract-props argv)
+             (util/shallow-obj-to-map props))
+      (util/shallow-obj-to-map props))))
 
 
 (defn value->element

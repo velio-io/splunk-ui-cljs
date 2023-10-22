@@ -16,6 +16,7 @@
   },
   "scripts": {
     "stories:watch": "shadow-cljs watch stories",
-    "storybook:dev": "start-storybook -p 6006"
+    "storybook:dev": "start-storybook -p 6006",
+    "storybook:build": "build-storybook --docs"
   }
 }
