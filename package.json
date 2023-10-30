@@ -8,8 +8,9 @@
     "shadow-cljs": "2.25.3"
   },
   "dependencies": {
-    "@splunk/react-ui": "4.17.1",
-    "@splunk/themes": "0.16.2",
+    "@splunk/react-events-viewer": "5.2.0",
+    "@splunk/react-ui": "4.21.1",
+    "@splunk/themes": "0.16.3",
     "react": "^16.13.0",
     "react-dom": "^16.13.0",
     "styled-components": "5.3.10"

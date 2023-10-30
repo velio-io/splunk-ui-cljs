@@ -216,17 +216,19 @@
                    menu-items)]
 
                  [:> HeadCell cell-props
-                  header-label]))))]
+                  (utils/value->element header-label)]))))]
 
          (into
           [:> Body]
           (map
            (fn [{:keys [expanded] :as row}]
-             (let [expansion (if (fn? expansion-row)
-                               (expansion-row row))
+             (let [expansion (or (:expansion-row row)
+                                 (when (fn? expansion-row)
+                                   (expansion-row row)))
                    row-props (utils/assoc-some {:data row}
-                               :key (when (some? row-key)
-                                      (row-key row))
+                               :key (or (:key row)
+                                        (when (some? row-key)
+                                          (row-key row)))
                                :onClick (when (fn? on-row-click)
                                           (fn [_event _data]
                                             (on-row-click row)))
