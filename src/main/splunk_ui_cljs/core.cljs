@@ -13,7 +13,8 @@
    [splunk-ui-cljs.tab-layout :as splunk.tab-layout]
    [splunk-ui-cljs.message :as splunk.message]
    [splunk-ui-cljs.modal :as splunk.modal]
-   [splunk-ui-cljs.cards :as splunk.cards]))
+   [splunk-ui-cljs.cards :as splunk.cards]
+   [splunk-ui-cljs.events-viewer :as splunk.events-viewer]))
 
 
 (def input-text splunk.input-text/input-text)
@@ -59,3 +60,5 @@
 (def card-header splunk.cards/header)
 (def card-body splunk.cards/body)
 (def card-footer splunk.cards/footer)
+
+(def events-viewer splunk.events-viewer/events-viewer)
