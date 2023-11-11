@@ -122,21 +122,21 @@
             {:keys [count offset request-total-count]}
             (utils/model->value request-params)
 
-            request-params #js {:count             count
-                                :offset            offset
-                                :requestTotalCount request-total-count}
+            request-params {:count             count
+                            :offset            offset
+                            :requestTotalCount request-total-count}
 
             data           (-> model utils/model->value clj->js)
             fields         (when (some? fields)
                              (-> fields utils/model->value clj->js))
             dataset        (.fromJSONArray DataSet fields data)
 
-            meta           #js {:totalCount (utils/model->value total-count)}]
+            meta           {:totalCount (utils/model->value total-count)}]
 
         [:> EventsViewer
-         (utils/assoc-some {:dataSources     #js {:primary #js {:requestParams request-params
-                                                                :data          dataset
-                                                                :meta          meta}}
+         (utils/assoc-some {:dataSources     {:primary {:requestParams request-params
+                                                        :data          dataset
+                                                        :meta          meta}}
                             :options         options
                             :onOptionsChange (fn [option]
                                                (when (fn? on-options-change)
