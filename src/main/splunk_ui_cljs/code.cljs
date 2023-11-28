@@ -42,7 +42,27 @@
    (.of view/keymap historyKeymap)])
 
 
-(defn code [{:keys [model on-update]}]
+(defn dispatch-new-doc [{:keys [view local-state]} new-doc]
+  (let [old-doc @local-state]
+    (when (not= new-doc old-doc)
+      (let [doc (go/getValueByKeys @view "state" "doc")]
+        (.dispatch ^EditorView @view
+                   #js {:changes #js {:from 0 :to (go/get doc "length") :insert new-doc}})))))
+
+
+(defn handle-model-change [{:keys [model view local-state]}]
+  (let [dispatch-doc-fn (partial dispatch-new-doc {:view view :local-state local-state})]
+    (if (satisfies? IWatchable model)
+      (do (remove-watch model :model-change)
+          (add-watch model :model-change #(dispatch-doc-fn %4)))
+      (dispatch-doc-fn model))))
+
+
+(defn code
+  "Code editor component
+   - `model` (required) Code listing to show in the code editor. Could be an atom
+   - `on-change` (optional) Function that will receive code changes as argument"
+  [{:keys [model on-update]}]
   (let [code-ref        (react/createRef nil)
         view            (r/atom nil)
         local-state     (r/atom nil)
@@ -50,7 +70,7 @@
                           (let [old-doc @local-state
                                 doc     (go/getValueByKeys view "state" "doc")
                                 new-doc (.toString doc)]
-                            (when (not= new-doc old-doc)
+                            (when (and (fn? on-update) (not= new-doc old-doc))
                               (reset! local-state new-doc)
                               (on-update new-doc))))
         update-listener (.. EditorView -updateListener (of update-fn))
@@ -67,7 +87,16 @@
         (let [element     (go/get code-ref "current")
               state       (.create EditorState editor-config)
               editor-view (new EditorView #js {:state state :parent element})]
-          (reset! view editor-view)))
+          (reset! view editor-view)
+          (handle-model-change {:model model :view view :local-state local-state})))
+
+      :component-did-update
+      (fn [this old-argv]
+        (let [{:keys [model]} (second (r/argv this))
+              old-model (-> old-argv second :model)]
+          (when (satisfies? IWatchable old-model)
+            (remove-watch old-model :model-change))
+          (handle-model-change {:model model :view view :local-state local-state})))
 
       :component-will-unmount
       (fn [_]

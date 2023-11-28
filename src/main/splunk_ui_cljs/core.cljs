@@ -15,7 +15,8 @@
    [splunk-ui-cljs.modal :as splunk.modal]
    [splunk-ui-cljs.cards :as splunk.cards]
    [splunk-ui-cljs.events-viewer :as splunk.events-viewer]
-   [splunk-ui-cljs.line-chart :as splunk.line-chart]))
+   [splunk-ui-cljs.line-chart :as splunk.line-chart]
+   [splunk-ui-cljs.code :as splunk.code]))
 
 
 (def input-text splunk.input-text/input-text)
@@ -65,3 +66,5 @@
 (def events-viewer splunk.events-viewer/events-viewer)
 
 (def line-chart splunk.line-chart/line-chart)
+
+(def code splunk.code/code)
