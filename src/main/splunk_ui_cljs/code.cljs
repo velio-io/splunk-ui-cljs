@@ -7,7 +7,8 @@
    [nextjournal.clojure-mode :as cm-clj]
    ["@codemirror/commands" :refer [history historyKeymap]]
    ["@codemirror/language" :refer [foldGutter syntaxHighlighting defaultHighlightStyle]]
-   ["@codemirror/state" :refer [EditorState Text]]
+   ["@codemirror/autocomplete" :refer [autocompletion startCompletion completeFromList]]
+   ["@codemirror/state" :refer [EditorState]]
    ["@codemirror/view" :as view :refer [EditorView]]))
 
 
@@ -32,13 +33,13 @@
 
 (def extensions
   [(.theme EditorView theme)
-   (history)
    (syntaxHighlighting defaultHighlightStyle)
-   (view/drawSelection)
    (foldGutter)
+   (view/drawSelection)
    (.. EditorState -allowMultipleSelections (of true))
    cm-clj/default-extensions
    (.of view/keymap cm-clj/complete-keymap)
+   (history)
    (.of view/keymap historyKeymap)])
 
 
@@ -61,8 +62,24 @@
 (defn code
   "Code editor component
    - `model` (required) Code listing to show in the code editor. Could be an atom
-   - `on-change` (optional) Function that will receive code changes as argument"
-  [{:keys [model on-update]}]
+   - `on-change` (optional) Function that will receive code changes as argument
+   - `width` (optional) Root element width
+   - `height` (optional) Root element height
+   Available shortcuts in the editor:
+   - barf-backward `⌃ + ⌥ + →` Shrink collection backwards by one form
+   - barf-forward `⌃ + ←` or `⌘ + ⇧ + J` Shrink collection forwards by one form
+   - kill `⌃ + K`  Remove all forms from cursor to end of line
+   - nav-left `⌥ + ←`  Move cursor one unit to the left (shift: selects this region)
+   - nav-select-left `⇧ + ⌥ + ←`
+   - nav-right `⌥ + →`  Move cursor one unit to the right (shift: selects this region)
+   - nav-select-right `⇧ + ⌥ + →`
+   - selection-grow `⌥ + ↑` or `⌘ + 1` Grow selections
+   - selection-return `⌥ + ↓` or `⌘ + 2` Shrink selections
+   - slurp-backward `⌃ + ⌥ + ←`  Grow collection backwards by one form
+   - slurp-forward `⌃ + →` or `⌘ + ⇧ + K` Expand collection to include form to the right
+   - unwrap `⌥ + S`  Lift contents of collection into parent
+   - start-autocompletion `⇧ + space` Open the autocompletion suggestions"
+  [{:keys [model on-update completions]}]
   (let [code-ref        (react/createRef nil)
         view            (r/atom nil)
         local-state     (r/atom nil)
@@ -74,11 +91,14 @@
                               (reset! local-state new-doc)
                               (on-update new-doc))))
         update-listener (.. EditorView -updateListener (of update-fn))
-        extensions      (-> extensions
-                            (conj update-listener)
-                            (to-array))
+        completions     (when (some? completions)
+                          (clj->js completions))
+        extensions      (cond-> extensions
+                                completions (conj (autocompletion #js {:override #js [(completeFromList completions)]})
+                                                  (.of view/keymap #js [#js {:key "Shift-Space" :run startCompletion}]))
+                                :always (conj update-listener))
         document        (->> model utils/model->value (reset! local-state))
-        editor-config   #js {:doc document :extensions extensions}]
+        editor-config   #js {:doc document :extensions (to-array extensions)}]
     (r/create-class
      {:display-name "code"
 
@@ -103,5 +123,7 @@
         (.destroy ^EditorView @view))
 
       :reagent-render
-      (fn [_]
-        [:div {:ref code-ref}])})))
+      (fn [{:keys [width height]}]
+        [:div {:ref    code-ref
+               :style  {:width  width
+                        :height height}}])})))
