@@ -28,8 +28,14 @@
     "@splunk/visualizations": "25.10.0",
     "react": "^16.13.0",
     "react-dom": "^16.13.0",
+    "react-flow-renderer": "10.3.17",
     "styled-components": "5.3.10",
     "w3c-keyname": "2.2.8"
+  },
+  "overrides": {
+    "@splunk/visualizations": {
+      "d3-selection": "^3.0.0"
+    }
   },
   "scripts": {
     "stories:watch": "shadow-cljs watch stories",
