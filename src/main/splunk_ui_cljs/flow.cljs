@@ -12,7 +12,11 @@
    ["@splunk/themes" :refer [variables SplunkThemeProvider]]
    ["@splunk/themes/getTheme" :default get-theme]
    ["@splunk/react-icons/Cross" :default Cross]
+   ["@splunk/react-icons/CrossCircle" :default CrossCircle]
    ["@splunk/react-icons/PlusCircle" :default PlusCircle]
+   ["@splunk/react-icons/TrashCanCross" :default TrashCanCross]
+   ["@splunk/react-icons/Cog" :default Cog]
+   ["@splunk/react-icons/FloppyDisk" :default FloppyDisk]
    [splunk-ui-cljs.dropdown :as dropdown]
    [splunk-ui-cljs.input-text :as inputs]
    [splunk-ui-cljs.code :as code]
@@ -28,18 +32,43 @@
    "default"            {:type :key-vals}})
 
 
-(defn js-assign [object overrides]
-  (j/call js/Object :assign #js {} object overrides))
+(defn is-object [value]
+  (and (= (type value) js/Object)
+       (not (nil? value))
+       (not (j/call js/Array :isArray value))))
+
+
+(defn deep-merge [object overrides]
+  (let [target-keys (j/call js/Object :keys overrides)]
+    (reduce (fn [acc key]
+              (let [target (j/get object key)
+                    source (j/get overrides key)]
+                (if (and (is-object target) (is-object source))
+                  (j/call js/Object :assign #js {} acc (j/obj key (deep-merge target source)))
+                  (j/call js/Object :assign #js {} acc (j/obj key source)))))
+            object
+            target-keys)))
+
+
+(defstyled node-action-button :button
+  {:color            (j/get variables :contentColorInverted)
+   :background-color (j/get variables :contentColorActive)
+   :cursor           "pointer"
+   :padding          "4px"
+   :border           "none"
+   :border-radius    "4px"
+   "& + &"           {:margin-left "4px"}
+   ":hover"          {:box-shadow       "0 0 0 2px #f9f9f9, 0 0 3px 2px rgb(0 0 0 / 25%)"
+                      :background-color (j/get variables :backgroundColorFloating)}})
 
 
 (defn stream-form [{:keys [stream-name]}]
   (let [*stream-state      (r/atom {:name  stream-name
                                     :error nil})
         change-stream-name #(swap! *stream-state assoc :name % :error nil)]
-    (fn [{:keys [id set-nodes get-nodes]}]
+    (fn [{:keys [id status set-nodes get-nodes]}]
       [:form
-       {:style {:position "relative"}
-        :on-submit
+       {:on-submit
         (fn [event]
           (j/call event :preventDefault)
           (let [{stream-name :name} @*stream-state
@@ -52,7 +81,7 @@
                      (map (fn [node]
                             (if (= id (j/get node :id))
                               (->> (j/lit {:data {:status nil :stream-name stream-name}})
-                                   (js-assign node))
+                                   (deep-merge node))
                               node)))
                      (to-array)
                      (set-nodes))))))}
@@ -70,34 +99,71 @@
 
        [:div {:style {:position "absolute"
                       :right    0
-                      :bottom   -64}}
-        [button/button {:label      "Cancel"
-                        :appearance "flat"
-                        :on-click   (fn [event]
-                                      (let [nodes (get-nodes)]
-                                        (->> nodes
-                                             (remove (fn [node]
-                                                       (= id (j/get node :id))))
-                                             (to-array)
-                                             (set-nodes))))}]
-        [button/button {:label      "Save"
-                        :type       "submit"
-                        :appearance "flat"}]]])))
+                      :bottom   -30}}
+        [node-action-button {:type    "button"
+                             :onClick (fn [event]
+                                        (let [nodes (get-nodes)]
+                                          (cond->> nodes
+                                                   (= status "new")
+                                                   (remove (fn [node]
+                                                             (= id (j/get node :id))))
+                                                   (= status "editing")
+                                                   (map (fn [node]
+                                                          (if (= id (j/get node :id))
+                                                            (->> (j/lit {:data {:status nil}})
+                                                                 (deep-merge node))
+                                                            node)))
+                                                   :always (to-array)
+                                                   :always (set-nodes))))}
+         [:> CrossCircle]]
+        [node-action-button {:type "submit"}
+         [:> FloppyDisk]]]])))
+
+
+(defstyled flow-node-actions :div
+  {:position "absolute"
+   :right    0
+   :bottom   "-30px"
+   :display  "none"})
 
 
 (defn stream-node [props]
   (j/let [^:js {{:keys [stream-name status]} :data id :id} props
           ^:js {:keys [setNodes getNodes]} (useReactFlow)
-          new? (= status "new")]
+          show-form? (or (= status "new") (= status "editing"))]
     (r/as-element
      [:div
-      (if new?
+      (if show-form?
         [stream-form
-         {:stream-name stream-name
-          :id          id
+         {:id          id
+          :stream-name stream-name
+          :status      status
           :set-nodes   setNodes
           :get-nodes   getNodes}]
-        [:b stream-name])
+
+        [:<>
+         [:b stream-name]
+         [flow-node-actions {:className "flow-node-actions"}
+          [node-action-button {:type    "button"
+                               :onClick (fn [event]
+                                          (let [nodes (getNodes)]
+                                            (->> nodes
+                                                 (remove (fn [node]
+                                                           (= id (j/get node :id))))
+                                                 (to-array)
+                                                 (setNodes))))}
+           [:> TrashCanCross]]
+          [node-action-button {:onClick (fn [event]
+                                          (let [nodes (getNodes)]
+                                            (->> nodes
+                                                 (map (fn [node]
+                                                        (if (= id (j/get node :id))
+                                                          (->> (j/lit {:data {:status "editing"}})
+                                                               (deep-merge node))
+                                                          node)))
+                                                 (to-array)
+                                                 (setNodes))))}
+           [:> Cog]]]])
       [:> Handle {:type     "source"
                   :position Position.Right}]])))
 
@@ -112,7 +178,7 @@
    ":hover"          {:border-color (j/get variables :interactiveColorBorderHover)}})
 
 
-(defstyled pair-close-icon :span
+(defstyled pair-remove-icon :span
   {:margin-left "10px"
    :padding     "2px"
    :color       (j/get variables :statusColorCritical)
@@ -122,7 +188,8 @@
 
 (defn code-control [{:keys [state]}]
   [code-container
-   [code/code {:on-update #(swap! state assoc :value %)}]])
+   [code/code {:model     (:value @state)
+               :on-update #(swap! state assoc :value %)}]])
 
 
 (defn strings-control [{:keys [state]}]
@@ -139,7 +206,8 @@
       [label/label {:label       field-label
                     :label-width 100}
        [inputs/input-text
-        {:on-change       #(swap! state assoc-in [:value field] %)
+        {:model           (get-in @state [:value field])
+         :on-change       #(swap! state assoc-in [:value field] %)
          :change-on-blur? false}]])))
 
 
@@ -158,7 +226,7 @@
           [:> Term key " : "]
           [:> Description
            [:span value]
-           [pair-close-icon {:onClick #(swap! state update :value dissoc key)}
+           [pair-remove-icon {:onClick #(swap! state update :value dissoc key)}
             [:> Cross]]]]))]))
 
 
@@ -181,7 +249,7 @@
           :model           pair-value
           :on-change       #(reset! pair-value %)
           :change-on-blur? false}]
-        [button/button {:icon       [:> PlusCircle {:width 20 :height 20}]
+        [button/button {:label      "Add"
                         :appearance "toggle"
                         :on-click   #(do (swap! state assoc-in [:value @pair-key] @pair-value)
                                          (reset! pair-key "")
@@ -199,11 +267,10 @@
         change-action-type #(doto *action-state
                               (swap! assoc :type % :value nil)
                               (swap! assoc-in [:errors :type] nil))]
-    (fn [{:keys [id set-nodes get-nodes]}]
+    (fn [{:keys [id status set-nodes get-nodes]}]
       (let [{action-name :name action-type :type :keys [errors]} @*action-state]
         [:form
-         {:style {:position      "relative"
-                  :margin-bottom "12px"}
+         {:style {:margin-bottom "12px"}
           :on-submit
           (fn [event]
             (j/call event :preventDefault)
@@ -225,7 +292,7 @@
                                                     :action-name  action-name
                                                     :action-type  action-type
                                                     :action-value action-value}})
-                                     (js-assign node))
+                                     (deep-merge node))
                                 node)))
                        (to-array)
                        (set-nodes))))))}
@@ -268,39 +335,67 @@
 
          [:div {:style {:position "absolute"
                         :right    0
-                        :bottom   -64}}
-          [button/button {:label      "Cancel"
-                          :appearance "flat"
-                          :on-click   (fn [event]
-                                        (let [nodes (get-nodes)]
-                                          (->> nodes
-                                               (remove (fn [node]
-                                                         (= id (j/get node :id))))
-                                               (to-array)
-                                               (set-nodes))))}]
-          [button/button {:label      "Save"
-                          :type       "submit"
-                          :appearance "flat"}]]]))))
+                        :bottom   -30}}
+          [node-action-button {:type    "button"
+                               :onClick (fn [event]
+                                          (let [nodes (get-nodes)]
+                                            (cond->> nodes
+                                                     (= status "new")
+                                                     (remove (fn [node]
+                                                               (= id (j/get node :id))))
+                                                     (= status "editing")
+                                                     (map (fn [node]
+                                                            (if (= id (j/get node :id))
+                                                              (->> (j/lit {:data {:status nil}})
+                                                                   (deep-merge node))
+                                                              node)))
+                                                     :always (to-array)
+                                                     :always (set-nodes))))}
+           [:> CrossCircle]]
+          [node-action-button {:type "submit"}
+           [:> FloppyDisk]]]]))))
 
 
 (defn action-node [props]
   (j/let [^:js {{:keys [action-name action-type action-value status]} :data id :id} props
           ^:js {:keys [setNodes getNodes]} (useReactFlow)
-          new? (= status "new")]
+          show-form? (or (= status "new") (= status "editing"))]
     (r/as-element
      [:div
       [:> Handle {:type     "target"
                   :position Position.Left}]
-      (if new?
+      (if show-form?
         [action-form
          {:id           id
+          :status       status
           :action-name  action-name
           :action-type  action-type
           :action-value action-value
           :set-nodes    setNodes
           :get-nodes    getNodes}]
 
-        [:b action-name])
+        [:<>
+         [:b action-name]
+         [flow-node-actions {:className "flow-node-actions"}
+          [node-action-button {:onClick (fn [event]
+                                          (let [nodes (getNodes)]
+                                            (->> nodes
+                                                 (remove (fn [node]
+                                                           (= id (j/get node :id))))
+                                                 (to-array)
+                                                 (setNodes))))}
+           [:> TrashCanCross]]
+          [node-action-button {:onClick (fn [event]
+                                          (let [nodes (getNodes)]
+                                            (->> nodes
+                                                 (map (fn [node]
+                                                        (if (= id (j/get node :id))
+                                                          (->> (j/lit {:data {:status "editing"}})
+                                                               (deep-merge node))
+                                                          node)))
+                                                 (to-array)
+                                                 (setNodes))))}
+           [:> Cog]]]])
 
       [:> Handle {:type     "source"
                   :position Position.Right}]])))
@@ -312,17 +407,19 @@
 
 
 (defglobalstyle node-styles
-                {".react-flow__node-stream, .react-flow__node-action"
-                 {:min-width        "120px"
-                  :padding          "8px 10px"
-                  :background-color "#e9e9e9"
-                  :box-shadow       "0 4px 6px -1px rgb(0 0 0 / 15%), 0 2px 4px -1px rgb(0 0 0 / 8%)"
-                  :border-radius    "2px"
-                  :text-align       "center"
-                  :font-size        "12px"
-                  :font-family      "'Splunk Platform Sans','Splunk Data Sans',Roboto,Droid,'Helvetica Neue',Helvetica,Arial,sans-serif"}
-                 ".react-flow__node-stream.selected, .react-flow__node-action.selected"
-                 {:outline "1px solid #0264d7"}})
+  {".react-flow__node-stream, .react-flow__node-action"
+   {:min-width        "120px"
+    :padding          "8px 10px"
+    :background-color "#e9e9e9"
+    :box-shadow       "0 4px 6px -1px rgb(0 0 0 / 15%), 0 2px 4px -1px rgb(0 0 0 / 8%)"
+    :border-radius    "2px"
+    :text-align       "center"
+    :font-size        "12px"
+    :font-family      "'Splunk Platform Sans','Splunk Data Sans',Roboto,Droid,'Helvetica Neue',Helvetica,Arial,sans-serif"}
+   ".react-flow__node-stream.selected, .react-flow__node-action.selected"
+   {:outline "1px solid #2c2c2c"}
+   ".react-flow__node-stream.selected .flow-node-actions, .react-flow__node-action.selected .flow-node-actions"
+   {:display "flex"}})
 
 
 (defstyled context-menu-node :div
