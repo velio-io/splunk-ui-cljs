@@ -62,7 +62,7 @@
                            #(when-let [input (go/get input-ref "current")]
                               (go/set input "value" value))
                            20))]
-    (fn [{:keys [model on-change change-on-blur? input-type disabled? placeholder status width
+    (fn [{:keys [model on-change change-on-blur? on-key-down input-type disabled? placeholder status width
                  validation-regex rows inline append prepend labelledBy labelText id]
           :or   {disabled? false input-type "text" change-on-blur? true}}]
       (let [disabled?         (utils/model->value disabled?)
@@ -90,6 +90,9 @@
                                                (when (and change-on-blur?
                                                           (not= @local-state @external-state))
                                                  (on-change-handler)))
+                               :onKeyDown    (fn [event]
+                                               (when (fn? on-key-down)
+                                                 (on-key-down event @local-state)))
                                :defaultValue @local-state
                                :inputRef     input-ref
                                :disabled     disabled?
