@@ -124,6 +124,13 @@
    (assoc props :input-type "text")])
 
 
+(defn input-number
+  "An input for numbers"
+  [props]
+  [input-text-base
+   (assoc props :input-type "number")])
+
+
 (defn input-password
   "An input for secret values such as passwords"
   [props]

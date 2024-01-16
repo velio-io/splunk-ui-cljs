@@ -8,4 +8,5 @@
   reagent/reagent                               {:mvn/version "1.2.0"}
   cljs-styled-components/cljs-styled-components {:mvn/version "0.1.12"}
   nextjournal/clojure-mode                      {:git/url "https://github.com/nextjournal/clojure-mode"
-                                                 :sha     "694abc70d4c5bed542236a2c276599781afdbb98"}}}
+                                                 :sha     "694abc70d4c5bed542236a2c276599781afdbb98"}
+  velio-io/vsf                                  {:local/root "../vsf"}}}

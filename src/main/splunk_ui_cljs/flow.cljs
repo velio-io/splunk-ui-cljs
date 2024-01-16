@@ -6,7 +6,8 @@
    [reagent.core :as r]
    [cljs-styled-components.reagent :refer-macros [defstyled defglobalstyle]]
    ["react-flow-renderer" :default ReactFlow
-    :refer [Background applyNodeChanges applyEdgeChanges addEdge Handle Position useReactFlow]]
+    :refer [Background Handle Position
+            applyNodeChanges applyEdgeChanges addEdge getOutgoers useReactFlow]]
    ["@splunk/react-ui/Menu" :default Menu :refer [Item]]
    ["@splunk/react-ui/DefinitionList" :default DL :refer [Term Description]]
    ["@splunk/themes" :refer [variables SplunkThemeProvider]]
@@ -21,14 +22,20 @@
    [splunk-ui-cljs.input-text :as inputs]
    [splunk-ui-cljs.code :as code]
    [splunk-ui-cljs.label :as label]
-   [splunk-ui-cljs.button :as button]))
+   [splunk-ui-cljs.button :as button]
+   [splunk-ui-cljs.utils :as utils]
+   [vsf.action]))
 
 
-(def action-controls-by-type
+(def vsf-actions
+  (ns-publics 'vsf.action))
+
+
+(def vsf-action-types
   {"where"              {:type :code}
    "increment"          {:type :no-args}
    "index"              {:type :strings}
-   "fixed-event-window" {:type :map :fields [{:field :size :label "Size"}]}
+   "fixed-event-window" {:type :map :fields [{:field :size :label "Size" :type :number}]}
    "default"            {:type :key-vals}})
 
 
@@ -200,15 +207,37 @@
     :placeholder     "single or comma separated list of strings"}])
 
 
+(def field-type-formatters
+  {:number  (fn [value]
+              (let [n (js/Number value)]
+                (if (js/isNaN n)
+                  nil
+                  n)))
+
+   :boolean (fn [value]
+              (if (string/blank? value)
+                nil
+                (boolean value)))
+
+   :string  (fn [value]
+              (if (string/blank? value)
+                nil
+                value))})
+
+
 (defn map-control [{:keys [fields state]}]
   (into [:<>]
-    (for [{field-label :label field :field} fields]
-      [label/label {:label       field-label
-                    :label-width 100}
-       [inputs/input-text
-        {:model           (get-in @state [:value field])
-         :on-change       #(swap! state assoc-in [:value field] %)
-         :change-on-blur? false}]])))
+    (for [{field-label :label field :field field-type :type} fields]
+      (let [formatter       (get field-type-formatters field-type identity)
+            input-component (case field-type
+                              :number inputs/input-number
+                              inputs/input-text)]
+        [label/label {:label       field-label
+                      :label-width 100}
+         [input-component
+          {:model           (get-in @state [:value field])
+           :on-change       #(swap! state assoc-in [:value field] (formatter %))
+           :change-on-blur? false}]]))))
 
 
 (defn key-value-pairs-form [{:keys [state]}]
@@ -324,7 +353,7 @@
 
          (when (some? action-type)
            (let [{control-type :type :as action-props}
-                 (-> (get action-controls-by-type action-type)
+                 (-> (get vsf-action-types action-type)
                      (assoc :state *action-state))]
              (case control-type
                :code [code-control action-props]
@@ -467,50 +496,164 @@
        "Create new action"]]]))
 
 
-(defn flow-renderer [{:keys [nodes edges]}]
-  (let [nodes               (r/atom (clj->js nodes))
-        edges               (r/atom (clj->js edges))
-        flow-ref            (react/createRef)
-        menu-position       (r/atom nil)
-        close-menu          #(reset! menu-position nil)
-        open-menu           (fn [event]
-                              (j/call event :preventDefault)
-                              (j/let [^:js {:keys [width height x y]} (j/call-in flow-ref [:current :getBoundingClientRect])
-                                      ^:js {:keys [clientX clientY]} event]
-                                (reset! menu-position
-                                        {:top      (and (< clientY (- height 200)) clientY)
-                                         :left     (and (< clientX (- width 200)) clientX)
-                                         :right    (and (>= clientX (- width 200)) (- width clientX))
-                                         :bottom   (and (>= clientY (- height 200)) (- height clientY))
-                                         :client-x (- clientX x)
-                                         :client-y (- clientY y)})))
-        apply-nodes-changes #(reset! nodes (applyNodeChanges % @nodes))
-        apply-edges-changes #(reset! edges (applyEdgeChanges % @edges))
-        add-edge-changes    #(reset! edges (addEdge (j/assoc! % :animated true) @edges))]
-    (fn [{:keys [width height]
-          :or   {width "100%" height 800}}]
-      [:<>
-       [node-styles]
-       [:div {:style {:width width :height height}}
-        [:> ReactFlow {:ref               flow-ref
-                       :nodes             @nodes
-                       :nodeTypes         node-types
-                       :onNodesChange     apply-nodes-changes
-                       :edges             @edges
-                       :onEdgesChange     apply-edges-changes
-                       :onConnect         add-edge-changes
-                       :fitView           true
-                       :maxZoom           1.4
-                       :onPaneClick       close-menu
-                       :onPaneContextMenu open-menu
-                       :proOptions        {:account         "paid-custom"
-                                           :hideAttribution true}}
-         [:> Background]
-         (when @menu-position
-           [:f> context-menu {:position   @menu-position
-                              :close-menu close-menu}])]]])))
+(defn flow-renderer [{:keys [on-update nodes edges width height]
+                      :or   {width "100%" height 800}}]
+  (r/with-let [nodes               (r/atom (clj->js nodes))
+               edges               (r/atom (clj->js edges))
+               flow-ref            (react/createRef)
+               menu-position       (r/atom nil)
+               close-menu          #(reset! menu-position nil)
+               open-menu           (fn [event]
+                                     (j/call event :preventDefault)
+                                     (j/let [^:js {:keys [width height x y]} (j/call-in flow-ref [:current :getBoundingClientRect])
+                                             ^:js {:keys [clientX clientY]} event]
+                                       (reset! menu-position
+                                               {:top      (and (< clientY (- height 200)) clientY)
+                                                :left     (and (< clientX (- width 200)) clientX)
+                                                :right    (and (>= clientX (- width 200)) (- width clientX))
+                                                :bottom   (and (>= clientY (- height 200)) (- height clientY))
+                                                :client-x (- clientX x)
+                                                :client-y (- clientY y)})))
+               apply-nodes-changes #(reset! nodes (applyNodeChanges % @nodes))
+               apply-edges-changes #(reset! edges (applyEdgeChanges % @edges))
+               add-edge-changes    #(reset! edges (addEdge (j/assoc! % :animated true) @edges))
+               change-handler      (r/track! #(when (fn? on-update)
+                                                (on-update {:nodes @nodes :edges @edges})))]
+    [:<>
+     [node-styles]
+     [:div {:style {:width width :height height}}
+      [:> ReactFlow {:ref               flow-ref
+                     :nodes             @nodes
+                     :nodeTypes         node-types
+                     :onNodesChange     apply-nodes-changes
+                     :edges             @edges
+                     :onEdgesChange     apply-edges-changes
+                     :onConnect         add-edge-changes
+                     :fitView           true
+                     :maxZoom           1.4
+                     :onPaneClick       close-menu
+                     :onPaneContextMenu open-menu
+                     :proOptions        {:account         "paid-custom"
+                                         :hideAttribution true}}
+       [:> Background]
+       (when @menu-position
+         [:f> context-menu {:position   @menu-position
+                            :close-menu close-menu}])]]]
+    (finally
+     (r/dispose! change-handler))))
 
 
-(defn flow [props]
-  [:> SplunkThemeProvider {:density "compact"}
-   [flow-renderer props]])
+(defn action->flow
+  [{:keys [nodes edges] :as flow}
+   root-id
+   {:keys [params children] action-type :action action-name :name}]
+  (if (= action-type :sdo)
+    ;; sdo action does nothing, just forward events to children
+    (reduce
+     (fn [acc action]
+       (action->flow acc root-id action))
+     flow
+     children)
+    ;; create a new action node
+    (let [action-id     (str (random-uuid))
+          params->value (some->> action-type (get vsf-action-types) :params-fn)
+          nodes         (conj nodes
+                              {:id       action-id
+                               :type     "action"
+                               :data     {:action-name  action-name
+                                          :action-type  (name action-type)
+                                          :action-value (when params->value (params->value params))}
+                               :position {:x 0 :y 0}})
+          edges         (conj edges
+                              {:id       (str root-id "-" action-id)
+                               :source   root-id
+                               :target   action-id
+                               :animated true})
+          flow'         {:nodes nodes :edges edges}]
+      (if (seq children)
+        (reduce
+         (fn [acc action]
+           (action->flow acc action-id action))
+         flow'
+         children)
+        ;; no children, return the flow data
+        flow'))))
+
+
+(defn streams->flow
+  "This function will convert a streams map (map where each key describes a separate stream) of shape
+   ```
+   {:foo {:actions {:action      :sdo
+                    :description {:message \"Forward events to children\"}
+                    :children    [{:action      :increment
+                                   :name        \"bar\"
+                                   :description {:message \"Increment the :metric field\"}
+                                   :children    nil}]}}}
+   ```
+   into a nodes and edges map of shape
+   ```
+   {:nodes [{:id       [random-uuid]
+             :type     \"stream\"
+             :data     {:stream-name \"foo\"}
+             :position {:x 0 :y 0}}
+            {:id       [random-uuid]
+             :type     \"action\"
+             :data     {:action-name \"bar\"
+                        :action-type \"increment\"
+                        :action-value nil}
+             :position {:x 0 :y 0}}]
+    :edges [{:id       [input-uuid]-[output-uuid]
+             :source   [input-uuid]
+             :target   [output-uuid]
+             :animated true}]}
+   ```
+  "
+  [streams]
+  (->>
+   (for [[stream-name {:keys [actions]}] streams]
+     (let [stream-id   (str (random-uuid))
+           stream-node {:id       stream-id
+                        :type     "stream"
+                        :data     {:stream-name (name stream-name)}
+                        :position {:x 0 :y 0}}
+           flow        {:nodes [stream-node]
+                        :edges []}]
+       (action->flow flow stream-id actions)))
+   (apply merge-with into)))
+
+
+(defn flow->action [{:keys [nodes edges] :as flow} node]
+  (j/let [^:js {{:keys [action-name action-type action-value]} :data} node
+          children  (getOutgoers node nodes edges)
+          action-fn (get vsf-actions (symbol action-type))]
+    (let [actions (map #(flow->action flow %) children)
+          actions (if (some? action-value)
+                    (concat [action-value] actions)
+                    actions)]
+      ;; @TODO save action name
+      (apply action-fn actions))))
+
+
+(defn flow->streams [{:keys [nodes edges] :as flow}]
+  (let [stream-nodes (filter (fn [node]
+                               (= "stream" (j/get node :type)))
+                             nodes)]
+    (->> stream-nodes
+         (map (fn [stream-node]
+                (j/let [^:js {{:keys [stream-name]} :data} stream-node
+                        children (getOutgoers stream-node nodes edges)]
+                  (->> children
+                       (map #(flow->action flow %))
+                       (apply vsf.action/stream {:name stream-name})))))
+         (apply vsf.action/streams))))
+
+
+(defn flow [{:keys [model]}]
+  (let [streams (utils/model->value model)
+        {:keys [nodes edges]} (streams->flow streams)]
+    [:> SplunkThemeProvider {:density "compact"}
+     [flow-renderer {:nodes     nodes
+                     :edges     edges
+                     ;; @TODO limit the number of on-update calls
+                     :on-update #(do (swap! model (flow->streams %))
+                                     (prn (flow->streams %)))}]]))
