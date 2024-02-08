@@ -7,7 +7,7 @@
    [cljs-styled-components.reagent :refer-macros [defstyled defglobalstyle]]
    ["react-flow-renderer" :default ReactFlow
     :refer [Background Handle Position ReactFlowProvider
-            applyNodeChanges applyEdgeChanges addEdge getOutgoers useReactFlow]]
+            applyNodeChanges applyEdgeChanges addEdge getIncomers getOutgoers useReactFlow]]
    ["@splunk/react-ui/Menu" :default Menu :refer [Item]]
    ["@splunk/react-ui/DefinitionList" :default DL :refer [Term Description]]
    ["@splunk/themes" :refer [variables SplunkThemeProvider]]
@@ -556,10 +556,18 @@
                                      (swap! *flow-data (fn [{:keys [edges] :as data}]
                                                          (->> (applyEdgeChanges updates edges)
                                                               (assoc data :edges)))))
-               add-edge-changes    (fn [new-edge]
-                                     (swap! *flow-data (fn [{:keys [edges] :as data}]
-                                                         (->> (addEdge (j/assoc! new-edge :animated true) edges)
-                                                              (assoc data :edges)))))
+               on-new-edge         (fn [new-edge]
+                                     (let [{:keys [nodes edges]} @*flow-data
+                                           target-node-id      (j/get new-edge :target)
+                                           target-node         (->> nodes
+                                                                    (filter (fn [node]
+                                                                              (= (j/get node :id) target-node-id)))
+                                                                    (first))
+                                           target-connections? (getIncomers target-node nodes edges)]
+                                       (when (empty? target-connections?)
+                                         (swap! *flow-data (fn [{:keys [edges] :as data}]
+                                                             (->> (addEdge (j/assoc! new-edge :animated true) edges)
+                                                                  (assoc data :edges)))))))
                change-handler      (r/track! #(when (fn? on-update)
                                                 (let [{:keys [nodes edges]} @*flow-data]
                                                   (on-update {:nodes nodes :edges edges}))))
@@ -595,7 +603,7 @@
                        :onNodesChange     apply-nodes-changes
                        :edges             edges
                        :onEdgesChange     apply-edges-changes
-                       :onConnect         add-edge-changes
+                       :onConnect         on-new-edge
                        :maxZoom           1.4
                        :fitView           true
                        :onPaneClick       close-menu
