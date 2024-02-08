@@ -15,12 +15,22 @@
 
 (def streams
   (r/atom
-   {:foo {:actions {:action      :sdo
-                    :description {:message "Forward events to children"}
-                    :children    [{:action      :increment
-                                   :name        "bar"
-                                   :description {:message "Increment the :metric field"}
-                                   :children    nil}]}}}))
+   {:foo  {:actions {:action      :sdo
+                     :description {:message "Forward events to children"}
+                     :children    [{:action      :increment
+                                    :name        "Increment"
+                                    :description {:message "Increment the :metric field"}
+                                    :children    nil}]}}
+    :bar  {:actions {:action      :sdo
+                     :description {:message "Forward events to children"}
+                     :children    [{:action      :decrement
+                                    :name        "Decrement"
+                                    :description {:message "Decrement the :metric field"}
+                                    :children    nil}
+                                   {:action      :increment
+                                    :name        "Increment"
+                                    :description {:message "Increment the :metric field"}
+                                    :children    nil}]}}}))
 
 
 (defn ^:export flow-basic [args]

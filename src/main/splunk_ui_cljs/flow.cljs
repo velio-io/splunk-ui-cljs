@@ -6,7 +6,7 @@
    [reagent.core :as r]
    [cljs-styled-components.reagent :refer-macros [defstyled defglobalstyle]]
    ["react-flow-renderer" :default ReactFlow
-    :refer [Background Handle Position
+    :refer [Background Handle Position ReactFlowProvider
             applyNodeChanges applyEdgeChanges addEdge getOutgoers useReactFlow]]
    ["@splunk/react-ui/Menu" :default Menu :refer [Item]]
    ["@splunk/react-ui/DefinitionList" :default DL :refer [Term Description]]
@@ -18,6 +18,7 @@
    ["@splunk/react-icons/TrashCanCross" :default TrashCanCross]
    ["@splunk/react-icons/Cog" :default Cog]
    ["@splunk/react-icons/FloppyDisk" :default FloppyDisk]
+   ["elkjs/lib/elk.bundled.js" :default ELK]
    [splunk-ui-cljs.dropdown :as dropdown]
    [splunk-ui-cljs.input-text :as inputs]
    [splunk-ui-cljs.code :as code]
@@ -474,7 +475,7 @@
           :position position}))
 
 
-(defn context-menu [{:keys [position close-menu]}]
+(defn context-menu [{:keys [position close-menu layout]}]
   (j/let [^:js {:keys [addNodes project getZoom]} (useReactFlow)
           {:keys [client-x client-y]} position
           zoom          (getZoom)
@@ -493,13 +494,46 @@
                            (-> (new-action node-position)
                                (addNodes))
                            (close-menu))}
-       "Create new action"]]]))
+       "Create new action"]
+      [:> Item {:onClick (fn []
+                           (layout)
+                           (close-menu))}
+       "Layout nodes"]]]))
+
+
+(def elk
+  (new ELK))
+
+
+(def elk-options
+  {"elk.algorithm"                             "layered"
+   "elk.direction"                             "RIGHT"
+   "elk.layered.spacing.nodeNodeBetweenLayers" "100"
+   "elk.spacing.nodeNode"                      "80"})
+
+
+(defn layout-nodes [{:keys [nodes edges]}]
+  (let [graph {:id            "root"
+               :layoutOptions elk-options
+               :children      (map (fn [node]
+                                     (j/assoc! node :targetPosition "left" :sourcePosition "right"
+                                               :width 120 :height 40))
+                                   nodes)
+               :edges         edges}]
+    (-> (j/call elk :layout (clj->js graph))
+        (j/call :then
+                (fn [graph]
+                  {:nodes (->> (j/get graph :children)
+                               (map (fn [node]
+                                      (j/let [^:js {:keys [x y]} node]
+                                        (j/assoc! node :position #js {:x x :y y}))))
+                               (to-array))
+                   :edges (j/get graph :edges)})))))
 
 
 (defn flow-renderer [{:keys [on-update nodes edges width height]
                       :or   {width "100%" height 800}}]
-  (r/with-let [nodes               (r/atom (clj->js nodes))
-               edges               (r/atom (clj->js edges))
+  (r/with-let [*flow-data          (r/atom {:nodes (clj->js nodes) :edges (clj->js edges)})
                flow-ref            (react/createRef)
                menu-position       (r/atom nil)
                close-menu          #(reset! menu-position nil)
@@ -514,31 +548,67 @@
                                                 :bottom   (and (>= clientY (- height 200)) (- height clientY))
                                                 :client-x (- clientX x)
                                                 :client-y (- clientY y)})))
-               apply-nodes-changes #(reset! nodes (applyNodeChanges % @nodes))
-               apply-edges-changes #(reset! edges (applyEdgeChanges % @edges))
-               add-edge-changes    #(reset! edges (addEdge (j/assoc! % :animated true) @edges))
+               apply-nodes-changes (fn [updates]
+                                     (swap! *flow-data (fn [{:keys [nodes] :as data}]
+                                                         (->> (applyNodeChanges updates nodes)
+                                                              (assoc data :nodes)))))
+               apply-edges-changes (fn [updates]
+                                     (swap! *flow-data (fn [{:keys [edges] :as data}]
+                                                         (->> (applyEdgeChanges updates edges)
+                                                              (assoc data :edges)))))
+               add-edge-changes    (fn [new-edge]
+                                     (swap! *flow-data (fn [{:keys [edges] :as data}]
+                                                         (->> (addEdge (j/assoc! new-edge :animated true) edges)
+                                                              (assoc data :edges)))))
                change-handler      (r/track! #(when (fn? on-update)
-                                                (on-update {:nodes @nodes :edges @edges})))]
-    [:<>
-     [node-styles]
-     [:div {:style {:width width :height height}}
-      [:> ReactFlow {:ref               flow-ref
-                     :nodes             @nodes
-                     :nodeTypes         node-types
-                     :onNodesChange     apply-nodes-changes
-                     :edges             @edges
-                     :onEdgesChange     apply-edges-changes
-                     :onConnect         add-edge-changes
-                     :fitView           true
-                     :maxZoom           1.4
-                     :onPaneClick       close-menu
-                     :onPaneContextMenu open-menu
-                     :proOptions        {:account         "paid-custom"
-                                         :hideAttribution true}}
-       [:> Background]
-       (when @menu-position
-         [:f> context-menu {:position   @menu-position
-                            :close-menu close-menu}])]]]
+                                                (let [{:keys [nodes edges]} @*flow-data]
+                                                  (on-update {:nodes nodes :edges edges}))))
+               ;; workaround for referencing the latest fitView function
+               *fit-fn             (atom nil)]
+    (j/let [{:keys [nodes edges]} @*flow-data
+            ^:js {:keys [fitView]} (useReactFlow)
+            _      (reset! *fit-fn fitView)
+            layout (react/useCallback
+                    (fn []
+                      (let [{:keys [nodes edges]} @*flow-data]
+                        (-> (layout-nodes {:nodes nodes :edges edges})
+                            (j/call :then
+                                    (fn [graph]
+                                      (reset! *flow-data graph)
+                                      ;; fit the view after the layout updating is done
+                                      (js/setTimeout @*fit-fn 10))))
+                        ;; returning undefined is required for react hook to work properly
+                        js/undefined))
+                    #js [])]
+
+      ;; initial layout
+      (react/useLayoutEffect
+       #(layout)
+       #js [])
+
+      [:<>
+       [node-styles]
+       [:div {:style {:width width :height height}}
+        [:> ReactFlow {:ref               flow-ref
+                       :nodes             nodes
+                       :nodeTypes         node-types
+                       :onNodesChange     apply-nodes-changes
+                       :edges             edges
+                       :onEdgesChange     apply-edges-changes
+                       :onConnect         add-edge-changes
+                       :maxZoom           1.4
+                       :fitView           true
+                       :onPaneClick       close-menu
+                       :onPaneContextMenu open-menu
+                       :proOptions        {:account         "paid-custom"
+                                           :hideAttribution true}}
+         [:> Background]
+         (when @menu-position
+           [:f> context-menu {:position   @menu-position
+                              :close-menu close-menu
+                              :layout     layout}])]]])
+
+    ;; cleanup the change handler
     (finally
      (r/dispose! change-handler))))
 
@@ -651,9 +721,11 @@
 (defn flow [{:keys [model]}]
   (let [streams (utils/model->value model)
         {:keys [nodes edges]} (streams->flow streams)]
-    [:> SplunkThemeProvider {:density "compact"}
-     [flow-renderer {:nodes     nodes
-                     :edges     edges
-                     ;; @TODO limit the number of on-update calls
-                     :on-update #(do (swap! model (flow->streams %))
-                                     (prn (flow->streams %)))}]]))
+    (fn [{:keys [model]}]
+      [:> SplunkThemeProvider {:density "compact"}
+       [:> ReactFlowProvider
+        [:f> flow-renderer {:nodes     nodes
+                            :edges     edges
+                            ;; @TODO limit the number of on-update calls
+                            :on-update #(do (swap! model (flow->streams %))
+                                            (prn (flow->streams %)))}]]])))
