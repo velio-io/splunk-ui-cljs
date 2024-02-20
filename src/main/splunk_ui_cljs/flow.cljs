@@ -25,6 +25,7 @@
    [splunk-ui-cljs.label :as label]
    [splunk-ui-cljs.button :as button]
    [splunk-ui-cljs.utils :as utils]
+   [vsf.action-metadata]
    [vsf.action]))
 
 
@@ -32,10 +33,15 @@
   (ns-publics 'vsf.action))
 
 
+(def actions-choices
+  (->> (vals vsf.action-metadata/actions-controls)
+       (sort-by :label)))
+
+
 (def vsf-action-types
   {"where"              {:type :code}
    "increment"          {:type :no-args}
-   "index"              {:type :strings}
+   "index"              {:type :input}
    "fixed-event-window" {:type :map :fields [{:field :size :label "Size" :type :number}]}
    "default"            {:type :key-vals}})
 
@@ -95,10 +101,11 @@
                      (set-nodes))))))}
        (let [{stream-name :name} @*stream-state
              stream-name-error (:error @*stream-state)]
-         [label/label {:label       "Stream name"
-                       :label-width 100
-                       :status      (when (some? stream-name-error) "error")
-                       :help        stream-name-error}
+         [label/label
+          {:label       "Stream name"
+           :label-width 100
+           :status      (when (some? stream-name-error) "error")
+           :help        stream-name-error}
           [inputs/input-text
            {:model           stream-name
             :on-change       change-stream-name
@@ -108,21 +115,22 @@
        [:div {:style {:position "absolute"
                       :right    0
                       :bottom   -30}}
-        [node-action-button {:type    "button"
-                             :onClick (fn [event]
-                                        (let [nodes (get-nodes)]
-                                          (cond->> nodes
-                                                   (= status "new")
-                                                   (remove (fn [node]
-                                                             (= id (j/get node :id))))
-                                                   (= status "editing")
-                                                   (map (fn [node]
-                                                          (if (= id (j/get node :id))
-                                                            (->> (j/lit {:data {:status nil}})
-                                                                 (deep-merge node))
-                                                            node)))
-                                                   :always (to-array)
-                                                   :always (set-nodes))))}
+        [node-action-button
+         {:type    "button"
+          :onClick (fn [event]
+                     (let [nodes (get-nodes)]
+                       (cond->> nodes
+                                (= status "new")
+                                (remove (fn [node]
+                                          (= id (j/get node :id))))
+                                (= status "editing")
+                                (map (fn [node]
+                                       (if (= id (j/get node :id))
+                                         (->> (j/lit {:data {:status nil}})
+                                              (deep-merge node))
+                                         node)))
+                                :always (to-array)
+                                :always (set-nodes))))}
          [:> CrossCircle]]
         [node-action-button {:type "submit"}
          [:> FloppyDisk]]]])))
@@ -200,14 +208,6 @@
                :on-update #(swap! state assoc :value %)}]])
 
 
-(defn strings-control [{:keys [state]}]
-  [inputs/input-text
-   {:model           (string/join "," (:value @state))
-    :on-change       #(swap! state assoc :value (clojure.string/split % #",\s*"))
-    :change-on-blur? false
-    :placeholder     "single or comma separated list of strings"}])
-
-
 (def field-type-formatters
   {:number  (fn [value]
               (let [n (js/Number value)]
@@ -226,15 +226,29 @@
                 value))})
 
 
-(defn map-control [{:keys [fields state]}]
+(defn strings-control [{:keys [control-params state]}]
+  (let [field-type      (:type control-params)
+        formatter       (get field-type-formatters field-type identity)
+        input-component (if (= field-type :number)
+                          inputs/input-number
+                          inputs/input-text)]
+    [input-component
+     {:model           (:value @state)
+      :on-change       #(swap! state assoc :value (formatter %))
+      :change-on-blur? false
+      :placeholder     "single or comma separated list of strings"}]))
+
+
+(defn map-control [{:keys [control-params state]}]
   (into [:<>]
-    (for [{field-label :label field :field field-type :type} fields]
+    (for [{field-label :label field :field field-type :type} (:fields control-params)]
       (let [formatter       (get field-type-formatters field-type identity)
-            input-component (case field-type
-                              :number inputs/input-number
+            input-component (if (= field-type :number)
+                              inputs/input-number
                               inputs/input-text)]
-        [label/label {:label       field-label
-                      :label-width 100}
+        [label/label
+         {:label       field-label
+          :label-width 100}
          [input-component
           {:model           (get-in @state [:value field])
            :on-change       #(swap! state assoc-in [:value field] (formatter %))
@@ -263,27 +277,31 @@
 (defn key-vals-control []
   (let [pair-key   (r/atom "")
         pair-value (r/atom "")]
-    (fn [{:keys [state]}]
+    (fn [{:keys [control-params state]}]
       [:div
        [key-value-pairs-form
         {:state state}]
 
-       [:div {:style {:display "flex" :gap "4px"}}
-        [inputs/input-text
-         {:placeholder     "Key"
-          :model           pair-key
-          :on-change       #(reset! pair-key %)
-          :change-on-blur? false}]
-        [inputs/input-text
-         {:placeholder     "Value"
-          :model           pair-value
-          :on-change       #(reset! pair-value %)
-          :change-on-blur? false}]
-        [button/button {:label      "Add"
-                        :appearance "toggle"
-                        :on-click   #(do (swap! state assoc-in [:value @pair-key] @pair-value)
-                                         (reset! pair-key "")
-                                         (reset! pair-value ""))}]]])))
+       (let [pairs-number (:pairs-number control-params)]
+         (when (or (nil? pairs-number)
+                   (and (some? pairs-number)
+                        (> pairs-number (count (:value @state)))))
+           [:div {:style {:display "flex" :gap "4px"}}
+            [inputs/input-text
+             {:placeholder     "Key"
+              :model           pair-key
+              :on-change       #(reset! pair-key %)
+              :change-on-blur? false}]
+            [inputs/input-text
+             {:placeholder     "Value"
+              :model           pair-value
+              :on-change       #(reset! pair-value %)
+              :change-on-blur? false}]
+            [button/button {:label      "Add"
+                            :appearance "toggle"
+                            :on-click   #(do (swap! state assoc-in [:value @pair-key] @pair-value)
+                                             (reset! pair-key "")
+                                             (reset! pair-value ""))}]]))])))
 
 
 (defn action-form [{:keys [action-name action-type action-value]}]
@@ -318,11 +336,14 @@
                   (->> nodes
                        (map (fn [node]
                               (if (= id (j/get node :id))
-                                (->> (j/lit {:data {:status       nil
-                                                    :action-name  action-name
-                                                    :action-type  action-type
-                                                    :action-value action-value}})
-                                     (deep-merge node))
+                                (let [params-format-fn (get-in vsf.action-metadata/actions-controls
+                                                               [action-type :control-params :format] identity)]
+                                  (->> (j/lit {:data {:status        nil
+                                                      :action-name   action-name
+                                                      :action-type   action-type
+                                                      :action-value  action-value
+                                                      :action-params params-format-fn}})
+                                       (deep-merge node)))
                                 node)))
                        (to-array)
                        (set-nodes))))))}
@@ -346,19 +367,15 @@
              {:on-change change-action-type
               :model     action-type
               :inline    false
-              :choices   [{:id "where" :label "where"} ;; code
-                          {:id "increment" :label "increment"} ;; no args
-                          {:id "index" :label "index"} ;; string or multiple strings
-                          {:id "fixed-event-window" :label "fixed event window"} ;; map with fixed keys
-                          {:id "default" :label "default"}]}]]) ;; random key value pairs
+              :choices   actions-choices}]])
 
          (when (some? action-type)
-           (let [{control-type :type :as action-props}
-                 (-> (get vsf-action-types action-type)
+           (let [{:keys [control-type] :as action-props}
+                 (-> (get vsf.action-metadata/actions-controls action-type)
                      (assoc :state *action-state))]
              (case control-type
                :code [code-control action-props]
-               :strings [strings-control action-props]
+               :input [strings-control action-props]
                :map [map-control action-props]
                :key-vals [key-vals-control action-props]
                nil)))
@@ -366,21 +383,22 @@
          [:div {:style {:position "absolute"
                         :right    0
                         :bottom   -30}}
-          [node-action-button {:type    "button"
-                               :onClick (fn [event]
-                                          (let [nodes (get-nodes)]
-                                            (cond->> nodes
-                                                     (= status "new")
-                                                     (remove (fn [node]
-                                                               (= id (j/get node :id))))
-                                                     (= status "editing")
-                                                     (map (fn [node]
-                                                            (if (= id (j/get node :id))
-                                                              (->> (j/lit {:data {:status nil}})
-                                                                   (deep-merge node))
-                                                              node)))
-                                                     :always (to-array)
-                                                     :always (set-nodes))))}
+          [node-action-button
+           {:type    "button"
+            :onClick (fn [event]
+                       (let [nodes (get-nodes)]
+                         (cond->> nodes
+                                  (= status "new")
+                                  (remove (fn [node]
+                                            (= id (j/get node :id))))
+                                  (= status "editing")
+                                  (map (fn [node]
+                                         (if (= id (j/get node :id))
+                                           (->> (j/lit {:data {:status nil}})
+                                                (deep-merge node))
+                                           node)))
+                                  :always (to-array)
+                                  :always (set-nodes))))}
            [:> CrossCircle]]
           [node-action-button {:type "submit"}
            [:> FloppyDisk]]]]))))
@@ -624,7 +642,10 @@
 (defn action->flow
   [{:keys [nodes edges] :as flow}
    root-id
-   {:keys [params children] action-type :action action-name :name}]
+   {:keys       [params children]
+    action-type :action
+    action-name :name
+    :as         action}]
   (if (= action-type :sdo)
     ;; sdo action does nothing, just forward events to children
     (reduce
@@ -633,21 +654,23 @@
      flow
      children)
     ;; create a new action node
-    (let [action-id     (str (random-uuid))
-          params->value (some->> action-type (get vsf-action-types) :params-fn)
-          nodes         (conj nodes
-                              {:id       action-id
-                               :type     "action"
-                               :data     {:action-name  action-name
-                                          :action-type  (name action-type)
-                                          :action-value (when params->value (params->value params))}
-                               :position {:x 0 :y 0}})
-          edges         (conj edges
-                              {:id       (str root-id "-" action-id)
-                               :source   root-id
-                               :target   action-id
-                               :animated true})
-          flow'         {:nodes nodes :edges edges}]
+    (let [action-id        (str (random-uuid))
+          params-parse-fn  (get-in vsf.action-metadata/actions-controls [action-type :control-params :parse] identity)
+          params-format-fn (get-in vsf.action-metadata/actions-controls [action-type :control-params :format] identity)
+          nodes            (conj nodes
+                                 {:id       action-id
+                                  :type     "action"
+                                  :data     {:action-name   action-name
+                                             :action-type   (name action-type)
+                                             :action-value  (params-parse-fn action)
+                                             :action-params params-format-fn}
+                                  :position {:x 0 :y 0}})
+          edges            (conj edges
+                                 {:id       (str root-id "-" action-id)
+                                  :source   root-id
+                                  :target   action-id
+                                  :animated true})
+          flow'            {:nodes nodes :edges edges}]
       (if (seq children)
         (reduce
          (fn [acc action]
@@ -701,12 +724,17 @@
 
 
 (defn flow->action [{:keys [nodes edges] :as flow} node]
-  (j/let [^:js {{:keys [action-name action-type action-value]} :data} node
+  (j/let [^:js {{:keys [action-name action-type action-value action-params]} :data} node
           children  (getOutgoers node nodes edges)
           action-fn (get vsf-actions (symbol action-type))]
     (let [actions (map #(flow->action flow %) children)
           actions (if (some? action-value)
-                    (concat [action-value] actions)
+                    (do (println (prn-str "action-value" action-value (type action-value) (action-params action-value)))
+                        (let [formatted-value (action-params action-value)
+                              formatted-value (if (list? formatted-value)
+                                                formatted-value ;; multiple positional parameters
+                                                [formatted-value])]
+                          (concat formatted-value actions)))
                     actions)]
       ;; @TODO save action name
       (apply action-fn actions))))
