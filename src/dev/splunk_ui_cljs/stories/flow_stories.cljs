@@ -10,7 +10,10 @@
   (utils/->default
    {:title     "Flow"
     :component flow
-    :argTypes  {:model {}}}))
+    :argTypes  {:model {:type        {:name "streams-map" :required true}
+                        :description "Map of streams definitions to render on canvas.
+                                      Can be nil, map or atom. If atom, the component will react to changes in the atom."
+                        :control     {:type nil}}}}))
 
 
 (def streams
@@ -34,6 +37,18 @@
 
 
 (defn ^:export flow-basic [args]
+  (r/as-element
+   [:> SplunkThemeProvider {:family "prisma" :colorScheme "light"}
+    [flow {:model nil}]]))
+
+
+(defn ^:export flow-initial-nodes [args]
+  (r/as-element
+   [:> SplunkThemeProvider {:family "prisma" :colorScheme "light"}
+    [flow {:model @streams}]]))
+
+
+(defn ^:export flow-state-updates [args]
   (r/as-element
    [:> SplunkThemeProvider {:family "prisma" :colorScheme "light"}
     [flow {:model streams}]]))

@@ -6,7 +6,7 @@
    [reagent.core :as r]
    [cljs-styled-components.reagent :refer-macros [defstyled defglobalstyle]]
    ["react-flow-renderer" :default ReactFlow
-    :refer [Background Handle Position ReactFlowProvider
+    :refer [Background Handle Position ReactFlowProvider BezierEdge getSimpleBezierPath
             applyNodeChanges applyEdgeChanges addEdge getIncomers getOutgoers useReactFlow]]
    ["@splunk/react-ui/Menu" :default Menu :refer [Item]]
    ["@splunk/react-ui/DefinitionList" :default DL :refer [Term Description]]
@@ -36,14 +36,6 @@
 (def actions-choices
   (->> (vals vsf.action-metadata/actions-controls)
        (sort-by :label)))
-
-
-(def vsf-action-types
-  {"where"              {:type :code}
-   "increment"          {:type :no-args}
-   "index"              {:type :input}
-   "fixed-event-window" {:type :map :fields [{:field :size :label "Size" :type :number}]}
-   "default"            {:type :key-vals}})
 
 
 (defn is-object [value]
@@ -226,33 +218,43 @@
                 value))})
 
 
-(defn strings-control [{:keys [control-params state]}]
+(defn strings-control [{:keys [id control-params state]}]
   (let [field-type      (:type control-params)
         formatter       (get field-type-formatters field-type identity)
         input-component (if (= field-type :number)
                           inputs/input-number
                           inputs/input-text)]
+    ^{:key (str id "-" field-type)}
     [input-component
      {:model           (:value @state)
       :on-change       #(swap! state assoc :value (formatter %))
-      :change-on-blur? false
-      :placeholder     "single or comma separated list of strings"}]))
+      :change-on-blur? false}]))
 
 
-(defn map-control [{:keys [control-params state]}]
+(defn map-control-input [{:keys [value on-change field-type field-label]}]
+  (let [formatter       (get field-type-formatters field-type identity)
+        input-component (if (= field-type :number)
+                          inputs/input-number
+                          inputs/input-text)]
+    [label/label
+     {:label       field-label
+      :label-width 100}
+     [input-component
+      {:model           value
+       :on-change       #(on-change (formatter %))
+       :change-on-blur? false}]]))
+
+
+(defn map-control [{:keys [id control-params state]}]
   (into [:<>]
-    (for [{field-label :label field :field field-type :type} (:fields control-params)]
-      (let [formatter       (get field-type-formatters field-type identity)
-            input-component (if (= field-type :number)
-                              inputs/input-number
-                              inputs/input-text)]
-        [label/label
-         {:label       field-label
-          :label-width 100}
-         [input-component
-          {:model           (get-in @state [:value field])
-           :on-change       #(swap! state assoc-in [:value field] (formatter %))
-           :change-on-blur? false}]]))))
+    (for [{field-label :label field :field field-type :type} (:fields control-params)
+          :let [field-value (get-in @state [:value field])]]
+      ^{:key (str id "-" field "-" field-label)}
+      [map-control-input
+       {:value       field-value
+        :on-change   #(swap! state assoc-in [:value field] %)
+        :field-type  field-type
+        :field-label field-label}])))
 
 
 (defn key-value-pairs-form [{:keys [state]}]
@@ -282,16 +284,19 @@
        [key-value-pairs-form
         {:state state}]
 
-       (let [pairs-number (:pairs-number control-params)]
+       (let [pairs-number (:pairs-number control-params)
+             pairs-count  (count (:value @state))]
          (when (or (nil? pairs-number)
                    (and (some? pairs-number)
-                        (> pairs-number (count (:value @state)))))
+                        (> pairs-number pairs-count)))
            [:div {:style {:display "flex" :gap "4px"}}
+            ^{:key (str "pair-key-" pairs-count)}
             [inputs/input-text
              {:placeholder     "Key"
               :model           pair-key
               :on-change       #(reset! pair-key %)
               :change-on-blur? false}]
+            ^{:key (str "pair-value-" pairs-count)}
             [inputs/input-text
              {:placeholder     "Value"
               :model           pair-value
@@ -302,6 +307,21 @@
                             :on-click   #(do (swap! state assoc-in [:value @pair-key] @pair-value)
                                              (reset! pair-key "")
                                              (reset! pair-value ""))}]]))])))
+
+
+(defn validate-action-params [action-type action-value]
+  (try
+    (let [params-format-fn (get-in vsf.action-metadata/actions-controls
+                                   [action-type :control-params :format] identity)
+          formatted-value  (params-format-fn action-value)
+          formatted-value  (if (list? formatted-value)
+                             formatted-value ;; multiple positional parameters
+                             [formatted-value])
+          action-fn        (get vsf-actions (symbol action-type))]
+      (apply action-fn formatted-value))
+    (catch js/Error ex
+      ;; @TODO add validation errors handling
+      {:format-error (or (ex-data ex) (ex-message ex))})))
 
 
 (defn action-form [{:keys [action-name action-type action-value]}]
@@ -323,7 +343,10 @@
           (fn [event]
             (j/call event :preventDefault)
             (let [{action-name :name action-type :type action-value :value} @*action-state
-                  action-name (some-> action-name string/trim)]
+                  action-name      (some-> action-name string/trim)
+                  params-format-fn (get-in vsf.action-metadata/actions-controls
+                                           [action-type :control-params :format] identity)
+                  value-error      (delay (validate-action-params action-type action-value))]
               (cond
                 (empty? action-name)
                 (swap! *action-state assoc-in [:errors :name] "Can't be empty")
@@ -331,19 +354,20 @@
                 (empty? action-type)
                 (swap! *action-state assoc-in [:errors :type] "Can't be empty")
 
+                (some? (:format-error @value-error))
+                (swap! *action-state assoc-in [:errors :value] (:format-error @value-error))
+
                 :otherwise
                 (let [nodes (get-nodes)]
                   (->> nodes
                        (map (fn [node]
                               (if (= id (j/get node :id))
-                                (let [params-format-fn (get-in vsf.action-metadata/actions-controls
-                                                               [action-type :control-params :format] identity)]
-                                  (->> (j/lit {:data {:status        nil
-                                                      :action-name   action-name
-                                                      :action-type   action-type
-                                                      :action-value  action-value
-                                                      :action-params params-format-fn}})
-                                       (deep-merge node)))
+                                (->> (j/lit {:data {:status        nil
+                                                    :action-name   action-name
+                                                    :action-type   action-type
+                                                    :action-value  action-value
+                                                    :action-params params-format-fn}})
+                                     (deep-merge node))
                                 node)))
                        (to-array)
                        (set-nodes))))))}
@@ -454,6 +478,38 @@
        :action action-node})
 
 
+(defn interactive-edge [props]
+  (j/let [^:js {:keys [sourceX sourceY targetX targetY style
+                       sourcePosition targetPosition markerEnd]} props
+          path (getSimpleBezierPath #js {:sourceX        sourceX
+                                         :sourceY        sourceY
+                                         :sourcePosition sourcePosition
+                                         :targetX        targetX
+                                         :targetY        targetY
+                                         :targetPosition targetPosition})]
+    (r/as-element
+     [:<>
+      [:> BezierEdge
+       {:sourceX        sourceX
+        :sourceY        sourceY
+        :targetX        targetX
+        :targetY        targetY
+        :sourcePosition sourcePosition
+        :targetPosition targetPosition
+        :style          style
+        :markerEnd      markerEnd}]
+      [:path
+       {:d             path
+        :fill          "none"
+        :strokeOpacity 0
+        :strokeWidth   16
+        :className     "react-flow__edge-interaction"}]])))
+
+
+(def edge-types
+  #js {:interactive interactive-edge})
+
+
 (defglobalstyle node-styles
   {".react-flow__node-stream, .react-flow__node-action"
    {:min-width        "120px"
@@ -467,7 +523,9 @@
    ".react-flow__node-stream.selected, .react-flow__node-action.selected"
    {:outline "1px solid #2c2c2c"}
    ".react-flow__node-stream.selected .flow-node-actions, .react-flow__node-action.selected .flow-node-actions"
-   {:display "flex"}})
+   {:display "flex"}
+   ".react-flow__edge-interaction"
+   {:cursor "pointer"}})
 
 
 (defstyled context-menu-node :div
@@ -551,7 +609,8 @@
 
 (defn flow-renderer [{:keys [on-update nodes edges width height]
                       :or   {width "100%" height 800}}]
-  (r/with-let [*flow-data          (r/atom {:nodes (clj->js nodes) :edges (clj->js edges)})
+  (r/with-let [*flow-data          (r/atom {:nodes (clj->js (or nodes []))
+                                            :edges (clj->js (or edges []))})
                flow-ref            (react/createRef)
                menu-position       (r/atom nil)
                close-menu          #(reset! menu-position nil)
@@ -584,11 +643,14 @@
                                            target-connections? (getIncomers target-node nodes edges)]
                                        (when (empty? target-connections?)
                                          (swap! *flow-data (fn [{:keys [edges] :as data}]
-                                                             (->> (addEdge (j/assoc! new-edge :animated true) edges)
+                                                             (->> (addEdge (j/assoc! new-edge :type "interactive") edges)
                                                                   (assoc data :edges)))))))
-               change-handler      (r/track! #(when (fn? on-update)
-                                                (let [{:keys [nodes edges]} @*flow-data]
-                                                  (on-update {:nodes nodes :edges edges}))))
+               _                   (add-watch *flow-data :notify-on-updates
+                                              (fn [_ _ old-state new-state]
+                                                (when (fn? on-update)
+                                                  ;; @TODO limit the number of on-update calls by comparing old and new values
+                                                  (let [{:keys [nodes edges]} new-state]
+                                                    (on-update {:nodes nodes :edges edges})))))
                ;; workaround for referencing the latest fitView function
                *fit-fn             (atom nil)]
     (j/let [{:keys [nodes edges]} @*flow-data
@@ -620,6 +682,7 @@
                        :nodeTypes         node-types
                        :onNodesChange     apply-nodes-changes
                        :edges             edges
+                       :edgeTypes         edge-types
                        :onEdgesChange     apply-edges-changes
                        :onConnect         on-new-edge
                        :maxZoom           1.4
@@ -636,13 +699,13 @@
 
     ;; cleanup the change handler
     (finally
-     (r/dispose! change-handler))))
+     (remove-watch *flow-data :notify-on-updates))))
 
 
 (defn action->flow
   [{:keys [nodes edges] :as flow}
    root-id
-   {:keys       [params children]
+   {:keys       [children]
     action-type :action
     action-name :name
     :as         action}]
@@ -655,21 +718,22 @@
      children)
     ;; create a new action node
     (let [action-id        (str (random-uuid))
-          params-parse-fn  (get-in vsf.action-metadata/actions-controls [action-type :control-params :parse] identity)
+          params-parse-fn  (get-in vsf.action-metadata/actions-controls [action-type :control-params :parse])
           params-format-fn (get-in vsf.action-metadata/actions-controls [action-type :control-params :format] identity)
           nodes            (conj nodes
                                  {:id       action-id
                                   :type     "action"
                                   :data     {:action-name   action-name
                                              :action-type   (name action-type)
-                                             :action-value  (params-parse-fn action)
+                                             :action-value  (when (some? params-parse-fn)
+                                                              (params-parse-fn action))
                                              :action-params params-format-fn}
                                   :position {:x 0 :y 0}})
           edges            (conj edges
                                  {:id       (str root-id "-" action-id)
+                                  :type     "interactive"
                                   :source   root-id
-                                  :target   action-id
-                                  :animated true})
+                                  :target   action-id})
           flow'            {:nodes nodes :edges edges}]
       (if (seq children)
         (reduce
@@ -729,15 +793,14 @@
           action-fn (get vsf-actions (symbol action-type))]
     (let [actions (map #(flow->action flow %) children)
           actions (if (some? action-value)
-                    (do (println (prn-str "action-value" action-value (type action-value) (action-params action-value)))
-                        (let [formatted-value (action-params action-value)
-                              formatted-value (if (list? formatted-value)
-                                                formatted-value ;; multiple positional parameters
-                                                [formatted-value])]
-                          (concat formatted-value actions)))
+                    (let [formatted-value (action-params action-value)
+                          formatted-value (if (list? formatted-value)
+                                            formatted-value ;; multiple positional parameters
+                                            [formatted-value])]
+                      (concat formatted-value actions))
                     actions)]
-      ;; @TODO save action name
-      (apply action-fn actions))))
+      (-> (apply action-fn actions)
+          (assoc :name action-name)))))
 
 
 (defn flow->streams [{:keys [nodes edges] :as flow}]
@@ -762,6 +825,5 @@
        [:> ReactFlowProvider
         [:f> flow-renderer {:nodes     nodes
                             :edges     edges
-                            ;; @TODO limit the number of on-update calls
-                            :on-update #(do (swap! model (flow->streams %))
-                                            (prn (flow->streams %)))}]]])))
+                            :on-update #(when (utils/atom? model)
+                                          (reset! model (flow->streams %)))}]]])))

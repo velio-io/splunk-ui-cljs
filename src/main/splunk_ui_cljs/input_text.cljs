@@ -93,7 +93,7 @@
                                :onKeyDown    (fn [event]
                                                (when (fn? on-key-down)
                                                  (on-key-down event @local-state)))
-                               :defaultValue @local-state
+                               :defaultValue (str @local-state)
                                :inputRef     input-ref
                                :disabled     disabled?
                                :error        (= status :error)

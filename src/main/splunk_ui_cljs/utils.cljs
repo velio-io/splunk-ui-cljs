@@ -16,12 +16,18 @@
            (partition 2 kvs))))
 
 
+(defn atom?
+  "Checks if x is an atom like object"
+  [x]
+  (satisfies? IDeref x))
+
+
 (defn model->value
   "Takes a value or an atom
    If it's a value, returns it
    If it's a Reagent object that supports IDeref, returns the value inside it by derefing"
   [val-or-atom]
-  (if (satisfies? IDeref val-or-atom)
+  (if (atom? val-or-atom)
     @val-or-atom
     val-or-atom))
 
