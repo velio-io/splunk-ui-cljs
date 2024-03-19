@@ -442,7 +442,7 @@
           :status       status
           :action-name  action-name
           :action-type  action-type
-          :action-value action-value
+          :action-value (js->clj action-value :keywordize-keys true)
           :set-nodes    setNodes
           :get-nodes    getNodes}]
 
@@ -626,13 +626,21 @@
                                                 :client-x (- clientX x)
                                                 :client-y (- clientY y)})))
                apply-nodes-changes (fn [updates]
-                                     (swap! *flow-data (fn [{:keys [nodes] :as data}]
-                                                         (->> (applyNodeChanges updates nodes)
-                                                              (assoc data :nodes)))))
+                                     (let [updates-types (into #{} (map #(j/get % :type)) updates)]
+                                       (swap! *flow-data (fn [{:keys [nodes] :as data}]
+                                                           (->> (applyNodeChanges updates nodes)
+                                                                (assoc data :nodes))))
+                                       (when (and (some updates-types ["remove" "reset"])
+                                                  (fn? on-update))
+                                         (on-update @*flow-data))))
                apply-edges-changes (fn [updates]
-                                     (swap! *flow-data (fn [{:keys [edges] :as data}]
-                                                         (->> (applyEdgeChanges updates edges)
-                                                              (assoc data :edges)))))
+                                     (let [updates-types (into #{} (map #(j/get % :type)) updates)]
+                                       (swap! *flow-data (fn [{:keys [edges] :as data}]
+                                                           (->> (applyEdgeChanges updates edges)
+                                                                (assoc data :edges))))
+                                       (when (and (contains? updates-types "remove")
+                                                  (fn? on-update))
+                                         (on-update @*flow-data))))
                on-new-edge         (fn [new-edge]
                                      (let [{:keys [nodes edges]} @*flow-data
                                            target-node-id      (j/get new-edge :target)
@@ -644,13 +652,9 @@
                                        (when (empty? target-connections?)
                                          (swap! *flow-data (fn [{:keys [edges] :as data}]
                                                              (->> (addEdge (j/assoc! new-edge :type "interactive") edges)
-                                                                  (assoc data :edges)))))))
-               _                   (add-watch *flow-data :notify-on-updates
-                                              (fn [_ _ old-state new-state]
-                                                (when (fn? on-update)
-                                                  ;; @TODO limit the number of on-update calls by comparing old and new values
-                                                  (let [{:keys [nodes edges]} new-state]
-                                                    (on-update {:nodes nodes :edges edges})))))
+                                                                  (assoc data :edges))))
+                                         (when (fn? on-update)
+                                           (on-update @*flow-data)))))
                ;; workaround for referencing the latest fitView function
                *fit-fn             (atom nil)]
     (j/let [{:keys [nodes edges]} @*flow-data
@@ -695,11 +699,7 @@
          (when @menu-position
            [:f> context-menu {:position   @menu-position
                               :close-menu close-menu
-                              :layout     layout}])]]])
-
-    ;; cleanup the change handler
-    (finally
-     (remove-watch *flow-data :notify-on-updates))))
+                              :layout     layout}])]]])))
 
 
 (defn action->flow
@@ -718,22 +718,23 @@
      children)
     ;; create a new action node
     (let [action-id        (str (random-uuid))
-          params-parse-fn  (get-in vsf.action-metadata/actions-controls [action-type :control-params :parse])
-          params-format-fn (get-in vsf.action-metadata/actions-controls [action-type :control-params :format] identity)
+          action-type'     (name action-type)
+          params-parse-fn  (get-in vsf.action-metadata/actions-controls [action-type' :control-params :parse])
+          params-format-fn (get-in vsf.action-metadata/actions-controls [action-type' :control-params :format] identity)
           nodes            (conj nodes
                                  {:id       action-id
                                   :type     "action"
                                   :data     {:action-name   action-name
-                                             :action-type   (name action-type)
+                                             :action-type   action-type'
                                              :action-value  (when (some? params-parse-fn)
                                                               (params-parse-fn action))
                                              :action-params params-format-fn}
                                   :position {:x 0 :y 0}})
           edges            (conj edges
-                                 {:id       (str root-id "-" action-id)
-                                  :type     "interactive"
-                                  :source   root-id
-                                  :target   action-id})
+                                 {:id     (str root-id "-" action-id)
+                                  :type   "interactive"
+                                  :source root-id
+                                  :target action-id})
           flow'            {:nodes nodes :edges edges}]
       (if (seq children)
         (reduce
@@ -793,7 +794,7 @@
           action-fn (get vsf-actions (symbol action-type))]
     (let [actions (map #(flow->action flow %) children)
           actions (if (some? action-value)
-                    (let [formatted-value (action-params action-value)
+                    (let [formatted-value (-> action-value (js->clj :keywordize-keys true) action-params)
                           formatted-value (if (list? formatted-value)
                                             formatted-value ;; multiple positional parameters
                                             [formatted-value])]
@@ -820,10 +821,12 @@
 (defn flow [{:keys [model]}]
   (let [streams (utils/model->value model)
         {:keys [nodes edges]} (streams->flow streams)]
-    (fn [{:keys [model]}]
+    (fn [{:keys [model on-change]}]
       [:> SplunkThemeProvider {:density "compact"}
        [:> ReactFlowProvider
         [:f> flow-renderer {:nodes     nodes
                             :edges     edges
-                            :on-update #(when (utils/atom? model)
-                                          (reset! model (flow->streams %)))}]]])))
+                            :on-update (fn [flow-data]
+                                         (cond
+                                           (fn? on-change) (on-change (flow->streams flow-data))
+                                           (utils/atom? model) (reset! model (flow->streams flow-data))))}]]])))
