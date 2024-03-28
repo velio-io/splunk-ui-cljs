@@ -18,7 +18,7 @@
    - `on-click` (optional) Callback triggered on user click
    - `to` (optional) Identifies the URL for a link. If set, Splunk UI applies an <a> tag instead of a <button> tag
    - `icon` (optional) Hiccup vector or any valid React element to show the icon"
-  [{:keys [label appearance disabled? on-click to inline append prepend labelledBy labelText id icon]
+  [{:keys [label appearance disabled? on-click to inline append prepend labelledBy labelText id icon type]
     :or   {appearance "default"}}]
   (let [disabled?      (utils/model->value disabled?)
         icon-component (utils/value->element icon)]
@@ -35,4 +35,5 @@
        :labelledBy labelledBy
        :labelText labelText
        :id id
-       :icon icon-component)]))
+       :icon icon-component
+       :type type)]))

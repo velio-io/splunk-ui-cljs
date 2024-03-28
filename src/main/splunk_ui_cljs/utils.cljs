@@ -1,5 +1,6 @@
 (ns splunk-ui-cljs.utils
   (:require
+   [applied-science.js-interop :as j]
    [reagent.core :as r]
    [reagent.impl.util :as util]
    [goog.object :as go]))
@@ -16,12 +17,18 @@
            (partition 2 kvs))))
 
 
+(defn atom?
+  "Checks if x is an atom like object"
+  [x]
+  (satisfies? IDeref x))
+
+
 (defn model->value
   "Takes a value or an atom
    If it's a value, returns it
    If it's a Reagent object that supports IDeref, returns the value inside it by derefing"
   [val-or-atom]
-  (if (satisfies? IDeref val-or-atom)
+  (if (atom? val-or-atom)
     @val-or-atom
     val-or-atom))
 
@@ -60,3 +67,19 @@
   (if (vector? value)
     (r/as-element value)
     value))
+
+
+(defn uget [value key]
+  (if (map? value)
+    (get value key)
+    (j/get value key)))
+
+
+(defn find-by
+  "Finds the first item in a collection that matches a predicate"
+  [key val coll]
+  (reduce (fn [_ x]
+            (when (= (uget x key) val)
+              (reduced x)))
+          nil
+          coll))
