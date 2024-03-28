@@ -1,5 +1,6 @@
 (ns splunk-ui-cljs.stories.flow-stories
   (:require
+   [cljs.pprint :refer [pprint]]
    [reagent.core :as r]
    ["@splunk/themes" :refer [SplunkThemeProvider]]
    [splunk-ui-cljs.stories.utils :as utils]
@@ -65,5 +66,5 @@
    [:> SplunkThemeProvider {:family "prisma" :colorScheme "light"}
     [flow {:model     streams
            :on-change (fn [model]
-                        (println model)
+                        (pprint model)
                         (reset! streams model))}]]))

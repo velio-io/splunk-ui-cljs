@@ -3,6 +3,7 @@
    [applied-science.js-interop :as j]
    ["react" :as react]
    [clojure.string :as string]
+   [cljs.pprint :refer [pprint]]
    [reagent.core :as r]
    [cljs-styled-components.reagent :refer-macros [defstyled defglobalstyle]]
    ["react-flow-renderer" :default ReactFlow
@@ -25,6 +26,7 @@
    [splunk-ui-cljs.label :as label]
    [splunk-ui-cljs.button :as button]
    [splunk-ui-cljs.utils :as utils]
+   [splunk-ui-cljs.undo-redo :as ur]
    [vsf.action-metadata]
    [vsf.action]))
 
@@ -72,7 +74,7 @@
   (let [*stream-state      (r/atom {:name  stream-name
                                     :error nil})
         change-stream-name #(swap! *stream-state assoc :name % :error nil)]
-    (fn [{:keys [id status set-nodes get-nodes]}]
+    (fn [{:keys [id status on-stream-save set-nodes get-nodes]}]
       [:form
        {:on-submit
         (fn [event]
@@ -86,8 +88,11 @@
                 (->> nodes
                      (map (fn [node]
                             (if (= id (j/get node :id))
-                              (->> (j/lit {:data {:status nil :stream-name stream-name}})
-                                   (deep-merge node))
+                              (let [stream-data  (j/lit {:data {:status nil :stream-name stream-name}})
+                                    updated-node (deep-merge node stream-data)]
+                                (when (fn? on-stream-save)
+                                  (on-stream-save updated-node))
+                                updated-node)
                               node)))
                      (to-array)
                      (set-nodes))))))}
@@ -136,18 +141,19 @@
 
 
 (defn stream-node [props]
-  (j/let [^:js {{:keys [stream-name status]} :data id :id} props
+  (j/let [^:js {{:keys [stream-name status on-save on-delete]} :data id :id} props
           ^:js {:keys [setNodes getNodes]} (useReactFlow)
           show-form? (or (= status "new") (= status "editing"))]
     (r/as-element
      [:div
       (if show-form?
         [stream-form
-         {:id          id
-          :stream-name stream-name
-          :status      status
-          :set-nodes   setNodes
-          :get-nodes   getNodes}]
+         {:id             id
+          :stream-name    stream-name
+          :status         status
+          :on-stream-save on-save
+          :set-nodes      setNodes
+          :get-nodes      getNodes}]
 
         [:<>
          [:b stream-name]
@@ -157,7 +163,10 @@
                                           (let [nodes (getNodes)]
                                             (->> nodes
                                                  (remove (fn [node]
-                                                           (= id (j/get node :id))))
+                                                           (when (= id (j/get node :id))
+                                                             (when (fn? on-delete)
+                                                               (on-delete node))
+                                                             true)))
                                                  (to-array)
                                                  (setNodes))))}
            [:> TrashCanCross]]
@@ -335,7 +344,7 @@
         change-action-type #(doto *action-state
                               (swap! assoc :type % :value nil)
                               (swap! assoc-in [:errors :type] nil))]
-    (fn [{:keys [id status set-nodes get-nodes]}]
+    (fn [{:keys [id status on-action-save set-nodes get-nodes]}]
       (let [{action-name :name action-type :type :keys [errors]} @*action-state]
         [:form
          {:style {:margin-bottom "12px"}
@@ -362,12 +371,15 @@
                   (->> nodes
                        (map (fn [node]
                               (if (= id (j/get node :id))
-                                (->> (j/lit {:data {:status        nil
-                                                    :action-name   action-name
-                                                    :action-type   action-type
-                                                    :action-value  action-value
-                                                    :action-params params-format-fn}})
-                                     (deep-merge node))
+                                (let [node-data    (j/lit {:data {:status        nil
+                                                                  :action-name   action-name
+                                                                  :action-type   action-type
+                                                                  :action-value  action-value
+                                                                  :action-params params-format-fn}})
+                                      updated-node (deep-merge node node-data)]
+                                  (when (fn? on-action-save)
+                                    (on-action-save updated-node))
+                                  updated-node)
                                 node)))
                        (to-array)
                        (set-nodes))))))}
@@ -429,7 +441,7 @@
 
 
 (defn action-node [props]
-  (j/let [^:js {{:keys [action-name action-type action-value status]} :data id :id} props
+  (j/let [^:js {{:keys [action-name action-type action-value status on-save on-delete]} :data id :id} props
           ^:js {:keys [setNodes getNodes]} (useReactFlow)
           show-form? (or (= status "new") (= status "editing"))]
     (r/as-element
@@ -438,13 +450,14 @@
                   :position Position.Left}]
       (if show-form?
         [action-form
-         {:id           id
-          :status       status
-          :action-name  action-name
-          :action-type  action-type
-          :action-value (js->clj action-value :keywordize-keys true)
-          :set-nodes    setNodes
-          :get-nodes    getNodes}]
+         {:id             id
+          :status         status
+          :action-name    action-name
+          :action-type    action-type
+          :action-value   (js->clj action-value :keywordize-keys true)
+          :on-action-save on-save
+          :set-nodes      setNodes
+          :get-nodes      getNodes}]
 
         [:<>
          [:b action-name]
@@ -453,7 +466,10 @@
                                           (let [nodes (getNodes)]
                                             (->> nodes
                                                  (remove (fn [node]
-                                                           (= id (j/get node :id))))
+                                                           (when (= id (j/get node :id))
+                                                             (when (fn? on-delete)
+                                                               (on-delete node))
+                                                             true)))
                                                  (to-array)
                                                  (setNodes))))}
            [:> TrashCanCross]]
@@ -607,56 +623,124 @@
                    :edges (j/get graph :edges)})))))
 
 
+(defn apply-history-change [{:keys [type value]} reverse? *flow-data]
+  (let [add    #js [#js {:item value :type "add"}]
+        remove #js [#js {:id (j/get value :id) :type "remove"}]]
+    (case type
+      :add-node
+      (swap! *flow-data (fn [{:keys [nodes] :as data}]
+                          (->> (applyNodeChanges (if reverse? remove add) nodes)
+                               (assoc data :nodes))))
+      :remove-node
+      (swap! *flow-data (fn [{:keys [nodes] :as data}]
+                          (->> (applyNodeChanges (if reverse? add remove) nodes)
+                               (assoc data :nodes))))
+      :add-edge
+      (swap! *flow-data (fn [{:keys [edges] :as data}]
+                          (->> (applyEdgeChanges (if reverse? remove add) edges)
+                               (assoc data :edges))))
+      :remove-edge
+      (swap! *flow-data (fn [{:keys [edges] :as data}]
+                          (->> (applyEdgeChanges (if reverse? add remove) edges)
+                               (assoc data :edges))))
+      :do-nothing)))
+
+
 (defn flow-renderer [{:keys [on-update nodes edges width height]
                       :or   {width "100%" height 800}}]
-  (r/with-let [*flow-data          (r/atom {:nodes (clj->js (or nodes []))
-                                            :edges (clj->js (or edges []))})
-               flow-ref            (react/createRef)
-               menu-position       (r/atom nil)
-               close-menu          #(reset! menu-position nil)
-               open-menu           (fn [event]
-                                     (j/call event :preventDefault)
-                                     (j/let [^:js {:keys [width height x y]} (j/call-in flow-ref [:current :getBoundingClientRect])
-                                             ^:js {:keys [clientX clientY]} event]
-                                       (reset! menu-position
-                                               {:top      (and (< clientY (- height 200)) clientY)
-                                                :left     (and (< clientX (- width 200)) clientX)
-                                                :right    (and (>= clientX (- width 200)) (- width clientX))
-                                                :bottom   (and (>= clientY (- height 200)) (- height clientY))
-                                                :client-x (- clientX x)
-                                                :client-y (- clientY y)})))
-               apply-nodes-changes (fn [updates]
-                                     (let [updates-types (into #{} (map #(j/get % :type)) updates)]
-                                       (swap! *flow-data (fn [{:keys [nodes] :as data}]
-                                                           (->> (applyNodeChanges updates nodes)
-                                                                (assoc data :nodes))))
-                                       (when (and (some updates-types ["remove" "reset"])
-                                                  (fn? on-update))
-                                         (on-update @*flow-data))))
-               apply-edges-changes (fn [updates]
-                                     (let [updates-types (into #{} (map #(j/get % :type)) updates)]
-                                       (swap! *flow-data (fn [{:keys [edges] :as data}]
-                                                           (->> (applyEdgeChanges updates edges)
-                                                                (assoc data :edges))))
-                                       (when (and (contains? updates-types "remove")
-                                                  (fn? on-update))
-                                         (on-update @*flow-data))))
-               on-new-edge         (fn [new-edge]
-                                     (let [{:keys [nodes edges]} @*flow-data
-                                           target-node-id      (j/get new-edge :target)
-                                           target-node         (->> nodes
-                                                                    (filter (fn [node]
-                                                                              (= (j/get node :id) target-node-id)))
-                                                                    (first))
-                                           target-connections? (getIncomers target-node nodes edges)]
-                                       (when (empty? target-connections?)
-                                         (swap! *flow-data (fn [{:keys [edges] :as data}]
-                                                             (->> (addEdge (j/assoc! new-edge :type "interactive") edges)
-                                                                  (assoc data :edges))))
-                                         (when (fn? on-update)
-                                           (on-update @*flow-data)))))
+  (r/with-let [*flow-data              (r/atom {})
+               flow-history            (atom (ur/new-cache))
+
+               on-node-save-handler    (fn [node]
+                                         (swap! flow-history ur/push {:type :add-node :value node})
+                                         (on-update @*flow-data))
+
+               on-node-delete-handler  (fn [node]
+                                         (swap! flow-history ur/push {:type :remove-node :value node})
+                                         (on-update @*flow-data))
+
+               _                       (reset! *flow-data {:nodes (->> (or nodes [])
+                                                                       (map #(assoc-in % [:data :on-delete] on-node-delete-handler))
+                                                                       clj->js)
+                                                           :edges (clj->js (or edges []))})
+
+               track-history-shortcuts (fn [event]
+                                         (let [cache @flow-history]
+                                           (when (j/get event :ctrlKey)
+                                             (case (j/get event :key)
+                                               "Z" (when (ur/has-next? cache)
+                                                     (let [cache'       (ur/redo cache)
+                                                           history-item (ur/current cache')]
+                                                       (apply-history-change history-item false *flow-data)
+                                                       (reset! flow-history cache')))
+                                               "z" (when-let [history-item (ur/current cache)]
+                                                     (apply-history-change history-item true *flow-data)
+                                                     (swap! flow-history ur/undo))
+                                               nil))))
+               _                       (j/call js/window :addEventListener "keydown" track-history-shortcuts)
+
+               flow-ref                (react/createRef)
+               menu-position           (r/atom nil)
+               close-menu              #(reset! menu-position nil)
+
+               open-menu               (fn [event]
+                                         (j/call event :preventDefault)
+                                         (j/let [^:js {:keys [width height x y]} (j/call-in flow-ref [:current :getBoundingClientRect])
+                                                 ^:js {:keys [clientX clientY]} event]
+                                           (reset! menu-position
+                                                   {:top      (and (< clientY (- height 200)) clientY)
+                                                    :left     (and (< clientX (- width 200)) clientX)
+                                                    :right    (and (>= clientX (- width 200)) (- width clientX))
+                                                    :bottom   (and (>= clientY (- height 200)) (- height clientY))
+                                                    :client-x (- clientX x)
+                                                    :client-y (- clientY y)})))
+
+               apply-nodes-changes     (fn [updates]
+                                         (let [updates-types (into #{} (map #(j/get % :type)) updates)
+                                               {:keys [nodes]} @*flow-data
+                                               updated-nodes (cond-> updates
+                                                                     (contains? updates-types "add")
+                                                                     (j/assoc-in! [0 :item :data :on-save] on-node-save-handler)
+                                                                     :always (j/assoc-in! [0 :item :data :on-delete] on-node-delete-handler)
+                                                                     :always (applyNodeChanges nodes))]
+                                           (swap! *flow-data assoc :nodes updated-nodes)
+                                           (when (contains? updates-types "remove")
+                                             (let [node-id (j/get (first updates) :id)]
+                                               (swap! flow-history ur/push {:type  :remove-node
+                                                                            :value (utils/find-by "id" node-id nodes)})
+                                               (on-update @*flow-data)))))
+
+               apply-edges-changes     (fn [updates]
+                                         (let [updates-types (into #{} (map #(j/get % :type)) updates)
+                                               {:keys [edges]} @*flow-data]
+                                           (swap! *flow-data (fn [{:keys [edges] :as data}]
+                                                               (->> (applyEdgeChanges updates edges)
+                                                                    (assoc data :edges))))
+                                           (when (contains? updates-types "remove")
+                                             (swap! flow-history ur/push {:type  :remove-edge
+                                                                          :value (utils/find-by "id" (j/get (first updates) :id) edges)})
+                                             (on-update @*flow-data))))
+
+               on-new-edge             (fn [new-edge]
+                                         (let [{:keys [nodes edges]} @*flow-data
+                                               target-node-id      (j/get new-edge :target)
+                                               source-node-id      (j/get new-edge :source)
+                                               new-edge            (j/assoc! new-edge :type "interactive"
+                                                                             :id (str source-node-id "-" target-node-id))
+                                               target-node         (->> nodes
+                                                                        (filter (fn [node]
+                                                                                  (= (j/get node :id) target-node-id)))
+                                                                        (first))
+                                               target-connections? (getIncomers target-node nodes edges)]
+                                           (when (empty? target-connections?)
+                                             (swap! *flow-data (fn [{:keys [edges] :as data}]
+                                                                 (->> (addEdge new-edge edges)
+                                                                      (assoc data :edges))))
+                                             (swap! flow-history ur/push {:type  :add-edge
+                                                                          :value new-edge})
+                                             (on-update @*flow-data))))
                ;; workaround for referencing the latest fitView function
-               *fit-fn             (atom nil)]
+               *fit-fn                 (atom nil)]
     (j/let [{:keys [nodes edges]} @*flow-data
             ^:js {:keys [fitView]} (useReactFlow)
             _      (reset! *fit-fn fitView)
@@ -699,7 +783,10 @@
          (when @menu-position
            [:f> context-menu {:position   @menu-position
                               :close-menu close-menu
-                              :layout     layout}])]]])))
+                              :layout     layout}])]]])
+
+    (finally
+     (j/call js/window :removeEventListener "keydown" track-history-shortcuts))))
 
 
 (defn action->flow
@@ -824,9 +911,10 @@
     (fn [{:keys [model on-change]}]
       [:> SplunkThemeProvider {:density "compact"}
        [:> ReactFlowProvider
-        [:f> flow-renderer {:nodes     nodes
-                            :edges     edges
-                            :on-update (fn [flow-data]
-                                         (cond
-                                           (fn? on-change) (on-change (flow->streams flow-data))
-                                           (utils/atom? model) (reset! model (flow->streams flow-data))))}]]])))
+        [:f> flow-renderer
+         {:nodes     nodes
+          :edges     edges
+          :on-update (fn [flow-data]
+                       (cond
+                         (fn? on-change) (on-change (flow->streams flow-data))
+                         (utils/atom? model) (reset! model (flow->streams flow-data))))}]]])))

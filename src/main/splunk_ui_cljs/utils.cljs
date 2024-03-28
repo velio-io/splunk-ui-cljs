@@ -1,5 +1,6 @@
 (ns splunk-ui-cljs.utils
   (:require
+   [applied-science.js-interop :as j]
    [reagent.core :as r]
    [reagent.impl.util :as util]
    [goog.object :as go]))
@@ -66,3 +67,19 @@
   (if (vector? value)
     (r/as-element value)
     value))
+
+
+(defn uget [value key]
+  (if (map? value)
+    (get value key)
+    (j/get value key)))
+
+
+(defn find-by
+  "Finds the first item in a collection that matches a predicate"
+  [key val coll]
+  (reduce (fn [_ x]
+            (when (= (uget x key) val)
+              (reduced x)))
+          nil
+          coll))

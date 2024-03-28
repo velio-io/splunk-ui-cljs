@@ -9,4 +9,4 @@
   [[org.clojure/clojurescript "1.10.520" :scope "provided"]]
 
   :source-paths
-  ["src/main"])
+  ["src/main" "src/dev" "src/test"])
