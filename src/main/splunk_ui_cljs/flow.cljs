@@ -3,7 +3,6 @@
    [applied-science.js-interop :as j]
    ["react" :as react]
    [clojure.string :as string]
-   [cljs.pprint :refer [pprint]]
    [reagent.core :as r]
    [cljs-styled-components.reagent :refer-macros [defstyled defglobalstyle]]
    ["react-flow-renderer" :default ReactFlow
@@ -40,13 +39,18 @@
        (sort-by :label)))
 
 
-(defn is-object [value]
+(defn is-object
+  "Check if the value is an JS object"
+  [value]
   (and (= (type value) js/Object)
        (not (nil? value))
        (not (j/call js/Array :isArray value))))
 
 
-(defn deep-merge [object overrides]
+(defn deep-merge
+  "Deep merge two JS objects recursively.
+   If the value is an object, merge it recursively."
+  [object overrides]
   (let [target-keys (j/call js/Object :keys overrides)]
     (reduce (fn [acc key]
               (let [target (j/get object key)
@@ -70,7 +74,9 @@
                       :background-color (j/get variables :backgroundColorFloating)}})
 
 
-(defn stream-form [{:keys [stream-name]}]
+(defn stream-form
+  "Form for editing stream node."
+  [{:keys [stream-name]}]
   (let [*stream-state      (r/atom {:name  stream-name
                                     :error nil})
         change-stream-name #(swap! *stream-state assoc :name % :error nil)]
@@ -81,6 +87,7 @@
           (j/call event :preventDefault)
           (let [{stream-name :name} @*stream-state
                 stream-name (some-> stream-name string/trim)]
+            ;; validate stream name
             (if (empty? stream-name)
               (swap! *stream-state assoc :error "Can't be empty")
 
@@ -88,6 +95,7 @@
                 (->> nodes
                      (map (fn [node]
                             (if (= id (j/get node :id))
+                              ;; update the stream node
                               (let [stream-data  (j/lit {:data {:status nil :stream-name stream-name}})
                                     updated-node (deep-merge node stream-data)]
                                 (when (fn? on-stream-save)
@@ -140,7 +148,9 @@
    :display  "none"})
 
 
-(defn stream-node [props]
+(defn stream-node
+  "Stream node component."
+  [props]
   (j/let [^:js {{:keys [stream-name status on-save on-delete]} :data id :id} props
           ^:js {:keys [setNodes getNodes]} (useReactFlow)
           show-form? (or (= status "new") (= status "editing"))]
@@ -203,7 +213,9 @@
                  :color  (j/get variables :statusColorHigh)}})
 
 
-(defn code-control [{:keys [state]}]
+(defn code-control
+  "Action control for editing code."
+  [{:keys [state]}]
   [code-container
    [code/code {:model     (:value @state)
                :on-update #(swap! state assoc :value %)}]])
@@ -227,7 +239,9 @@
                 value))})
 
 
-(defn strings-control [{:keys [id control-params state]}]
+(defn strings-control
+  "Action control for editing a simple string input."
+  [{:keys [id control-params state]}]
   (let [field-type      (:type control-params)
         formatter       (get field-type-formatters field-type identity)
         input-component (if (= field-type :number)
@@ -240,7 +254,9 @@
       :change-on-blur? false}]))
 
 
-(defn map-control-input [{:keys [value on-change field-type field-label]}]
+(defn map-control-input
+  "Single key-value pair input for rendering inside map-control."
+  [{:keys [value on-change field-type field-label]}]
   (let [formatter       (get field-type-formatters field-type identity)
         input-component (if (= field-type :number)
                           inputs/input-number
@@ -254,7 +270,9 @@
        :change-on-blur? false}]]))
 
 
-(defn map-control [{:keys [id control-params state]}]
+(defn map-control
+  "Action control for editing a map of key-value pairs (keys are predefined)."
+  [{:keys [id control-params state]}]
   (into [:<>]
     (for [{field-label :label field :field field-type :type} (:fields control-params)
           :let [field-value (get-in @state [:value field])]]
@@ -266,7 +284,9 @@
         :field-label field-label}])))
 
 
-(defn key-value-pairs-form [{:keys [state]}]
+(defn key-value-pairs-form
+  "Component for rendering entered key-value pairs."
+  [{:keys [state]}]
   (if (empty? (:value @state))
     [:div {:style {:margin     "10px"
                    :text-align "left"}}
@@ -285,7 +305,9 @@
             [:> Cross]]]]))]))
 
 
-(defn key-vals-control []
+(defn key-vals-control
+  "Action control for editing a map of key-value pairs (with inputs for keys)."
+  []
   (let [pair-key   (r/atom "")
         pair-value (r/atom "")]
     (fn [{:keys [control-params state]}]
@@ -318,7 +340,9 @@
                                              (reset! pair-value ""))}]]))])))
 
 
-(defn validate-action-params [action-type action-value]
+(defn validate-action-params
+  "Validate action parameters before saving."
+  [action-type action-value]
   (try
     (let [params-format-fn (get-in vsf.action-metadata/actions-controls
                                    [action-type :control-params :format] identity)
@@ -333,7 +357,9 @@
       {:format-error (or (ex-data ex) (ex-message ex))})))
 
 
-(defn action-form [{:keys [action-name action-type action-value]}]
+(defn action-form
+  "Form for editing action node."
+  [{:keys [action-name action-type action-value]}]
   (let [*action-state      (r/atom {:name   action-name
                                     :type   action-type
                                     :value  action-value
@@ -440,7 +466,9 @@
            [:> FloppyDisk]]]]))))
 
 
-(defn action-node [props]
+(defn action-node
+  "Action node component."
+  [props]
   (j/let [^:js {{:keys [action-name action-type action-value status on-save on-delete]} :data id :id} props
           ^:js {:keys [setNodes getNodes]} (useReactFlow)
           show-form? (or (= status "new") (= status "editing"))]
@@ -494,7 +522,9 @@
        :action action-node})
 
 
-(defn interactive-edge [props]
+(defn interactive-edge
+  "Custom edge component. Adds a wider transparent line for easier interaction."
+  [props]
   (j/let [^:js {:keys [sourceX sourceY targetX targetY style
                        sourcePosition targetPosition markerEnd]} props
           path (getSimpleBezierPath #js {:sourceX        sourceX
@@ -553,21 +583,27 @@
    :z-index  10})
 
 
-(defn new-stream [position]
+(defn new-stream
+  "Create a new stream node."
+  [position]
   (j/lit {:id       (str (random-uuid))
           :type     "stream"
           :data     {:status "new"}
           :position position}))
 
 
-(defn new-action [position]
+(defn new-action
+  "Create a new action node."
+  [position]
   (j/lit {:id       (str (random-uuid))
           :type     "action"
           :data     {:status "new"}
           :position position}))
 
 
-(defn context-menu [{:keys [position close-menu layout]}]
+(defn context-menu
+  "Component for rendering a context menu."
+  [{:keys [position close-menu layout]}]
   (j/let [^:js {:keys [addNodes project getZoom]} (useReactFlow)
           {:keys [client-x client-y]} position
           zoom          (getZoom)
@@ -604,7 +640,9 @@
    "elk.spacing.nodeNode"                      "80"})
 
 
-(defn layout-nodes [{:keys [nodes edges]}]
+(defn layout-nodes
+  "Layout nodes using ELK algorithm."
+  [{:keys [nodes edges]}]
   (let [graph {:id            "root"
                :layoutOptions elk-options
                :children      (map (fn [node]
@@ -623,7 +661,11 @@
                    :edges (j/get graph :edges)})))))
 
 
-(defn apply-history-change [{:keys [type value]} reverse? *flow-data]
+(defn apply-history-change
+  "Apply history change to the flow data.
+   Reverse the change if reverse? is true.
+   Update the flow data with the new nodes and edges."
+  [{:keys [type value]} reverse? *flow-data]
   (let [add    #js [#js {:item value :type "add"}]
         remove #js [#js {:id (j/get value :id) :type "remove"}]]
     (case type
@@ -646,14 +688,26 @@
       :do-nothing)))
 
 
-(defn flow-renderer [{:keys [on-update nodes edges width height]
-                      :or   {width "100%" height 800}}]
+(defn flow-renderer
+  "Main flow renderer component.
+   Renders the flow graph with nodes and edges."
+  [{:keys [on-update nodes edges width height]
+    :or   {width "100%" height 800}}]
   (r/with-let [*flow-data              (r/atom {})
                flow-history            (atom (ur/new-cache))
 
-               on-node-save-handler    (fn [node]
-                                         (swap! flow-history ur/push {:type :add-node :value node})
-                                         (on-update @*flow-data))
+               on-node-save-handler    (fn [new-node]
+                                         (swap! flow-history ur/push {:type :add-node :value new-node})
+                                         (let [new-node-id (j/get new-node :id)
+                                               {:keys [nodes edges]} @*flow-data]
+                                           ;; ensure that latest updates presented in the state
+                                           (on-update {:nodes (->> nodes
+                                                                   (map (fn [node]
+                                                                          (if (= new-node-id (j/get node :id))
+                                                                            (deep-merge node new-node)
+                                                                            node)))
+                                                                   (to-array))
+                                                       :edges edges})))
 
                on-node-delete-handler  (fn [node]
                                          (swap! flow-history ur/push {:type :remove-node :value node})
@@ -717,9 +771,12 @@
                                                                (->> (applyEdgeChanges updates edges)
                                                                     (assoc data :edges))))
                                            (when (contains? updates-types "remove")
-                                             (swap! flow-history ur/push {:type  :remove-edge
-                                                                          :value (utils/find-by "id" (j/get (first updates) :id) edges)})
+                                             (doseq [update updates]
+                                               (swap! flow-history ur/push {:type  :remove-edge
+                                                                            :value (utils/find-by "id" (j/get update :id) edges)}))
                                              (on-update @*flow-data))))
+
+               connect-source          (atom nil)
 
                on-new-edge             (fn [new-edge]
                                          (let [{:keys [nodes edges]} @*flow-data
@@ -731,31 +788,59 @@
                                                                         (filter (fn [node]
                                                                                   (= (j/get node :id) target-node-id)))
                                                                         (first))
-                                               target-connections? (getIncomers target-node nodes edges)]
+                                               target-connections? (getIncomers target-node nodes edges)
+                                               defer-updates?      (some? @connect-source)]
+                                           (reset! connect-source nil)
                                            (when (empty? target-connections?)
                                              (swap! *flow-data (fn [{:keys [edges] :as data}]
                                                                  (->> (addEdge new-edge edges)
                                                                       (assoc data :edges))))
                                              (swap! flow-history ur/push {:type  :add-edge
                                                                           :value new-edge})
-                                             (on-update @*flow-data))))
+                                             (when (not defer-updates?)
+                                               (on-update @*flow-data)))))
+
+               on-connect-start        (fn [_event params]
+                                         (let [node-id (j/get params :nodeId)]
+                                           (reset! connect-source node-id)))
+
                ;; workaround for referencing the latest fitView function
                *fit-fn                 (atom nil)]
     (j/let [{:keys [nodes edges]} @*flow-data
-            ^:js {:keys [fitView]} (useReactFlow)
-            _      (reset! *fit-fn fitView)
-            layout (react/useCallback
-                    (fn []
-                      (let [{:keys [nodes edges]} @*flow-data]
-                        (-> (layout-nodes {:nodes nodes :edges edges})
-                            (j/call :then
-                                    (fn [graph]
-                                      (reset! *flow-data graph)
-                                      ;; fit the view after the layout updating is done
-                                      (js/setTimeout @*fit-fn 10))))
-                        ;; returning undefined is required for react hook to work properly
-                        js/undefined))
-                    #js [])]
+            ^:js {:keys [fitView project getZoom addNodes]} (useReactFlow)
+            _              (reset! *fit-fn fitView)
+
+            layout         (react/useCallback
+                            (fn []
+                              (let [{:keys [nodes edges]} @*flow-data]
+                                (-> (layout-nodes {:nodes nodes :edges edges})
+                                    (j/call :then
+                                            (fn [graph]
+                                              (reset! *flow-data graph)
+                                              ;; fit the view after the layout updating is done
+                                              (js/setTimeout @*fit-fn 10))))
+                                ;; returning undefined is required for react hook to work properly
+                                js/undefined))
+                            #js [])
+
+            on-connect-end (react/useCallback
+                            (fn [event]
+                              (when-some [node-id @connect-source]
+                                (when (j/call-in event [:target :classList :contains] "react-flow__pane")
+                                  (j/let [^:js {:keys [x y]} (j/call-in flow-ref [:current :getBoundingClientRect])
+                                          ^:js {:keys [clientX clientY]} event
+                                          zoom          (getZoom)
+                                          node-position (project
+                                                         #js {:x (- (- clientX x) (* 60 zoom))
+                                                              :y (- (- clientY y) (* 20 zoom))})
+                                          new-node      (new-action node-position)
+                                          new-edge      #js {:source node-id
+                                                             :target (j/get new-node :id)}]
+                                    (addNodes new-node)
+                                    (on-new-edge new-edge))))
+                              ;; returning undefined is required for react hook to work properly
+                              js/undefined)
+                            #js [project])]
 
       ;; initial layout
       (react/useLayoutEffect
@@ -773,6 +858,8 @@
                        :edgeTypes         edge-types
                        :onEdgesChange     apply-edges-changes
                        :onConnect         on-new-edge
+                       :onConnectStart    on-connect-start
+                       :onConnectEnd      on-connect-end
                        :maxZoom           1.4
                        :fitView           true
                        :onPaneClick       close-menu
@@ -790,6 +877,19 @@
 
 
 (defn action->flow
+  "This function will convert a single action map into a nodes and edges map of shape
+   ```
+   {:nodes [{:id       [random-uuid]
+             :type     \"action\"
+             :data     {:action-name \"bar\"
+                        :action-type \"increment\"
+                        :action-value nil}
+             :position {:x 0 :y 0}}]
+    :edges [{:id       [input-uuid]-[output-uuid]
+             :source   [input-uuid]
+             :target   [output-uuid]
+             :animated true}]}
+   ```"
   [{:keys [nodes edges] :as flow}
    root-id
    {:keys       [children]
@@ -875,7 +975,9 @@
    (apply merge-with into)))
 
 
-(defn flow->action [{:keys [nodes edges] :as flow} node]
+(defn flow->action
+  "Convert a flow node into an action map."
+  [{:keys [nodes edges] :as flow} node]
   (j/let [^:js {{:keys [action-name action-type action-value action-params]} :data} node
           children  (getOutgoers node nodes edges)
           action-fn (get vsf-actions (symbol action-type))]
@@ -891,7 +993,9 @@
           (assoc :name action-name)))))
 
 
-(defn flow->streams [{:keys [nodes edges] :as flow}]
+(defn flow->streams
+  "Convert a react-flow graph (flat list) into a streams map with actions (tree)."
+  [{:keys [nodes edges] :as flow}]
   (let [stream-nodes (filter (fn [node]
                                (= "stream" (j/get node :type)))
                              nodes)]
@@ -905,7 +1009,9 @@
          (apply vsf.action/streams))))
 
 
-(defn flow [{:keys [model]}]
+(defn flow
+  "Flow graph component."
+  [{:keys [model]}]
   (let [streams (utils/model->value model)
         {:keys [nodes edges]} (streams->flow streams)]
     (fn [{:keys [model on-change]}]
