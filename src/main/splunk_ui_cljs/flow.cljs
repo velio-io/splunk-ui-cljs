@@ -471,7 +471,8 @@
   [props]
   (j/let [^:js {{:keys [action-name action-type action-value status on-save on-delete]} :data id :id} props
           ^:js {:keys [setNodes getNodes]} (useReactFlow)
-          show-form? (or (= status "new") (= status "editing"))]
+          show-form? (or (= status "new") (= status "editing"))
+          leaf?      (get-in vsf.action-metadata/actions-controls [action-type :leaf-action])]
     (r/as-element
      [:div
       [:> Handle {:type     "target"
@@ -513,8 +514,9 @@
                                                  (setNodes))))}
            [:> Cog]]]])
 
-      [:> Handle {:type     "source"
-                  :position Position.Right}]])))
+      (when-not leaf?
+        [:> Handle {:type     "source"
+                    :position Position.Right}])])))
 
 
 (def node-types
