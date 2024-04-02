@@ -1,5 +1,6 @@
 (ns splunk-ui-cljs.utils
   (:require
+   ["react" :as react]
    [applied-science.js-interop :as j]
    [reagent.core :as r]
    [reagent.impl.util :as util]
@@ -83,3 +84,19 @@
               (reduced x)))
           nil
           coll))
+
+
+(defn use-callback
+  ([func]
+   (react/useCallback
+    (fn [& args]
+      (apply func args)
+      js/undefined)
+    #js []))
+
+  ([func deps]
+   (react/useCallback
+    (fn [& args]
+      (apply func args)
+      js/undefined)
+    (to-array deps))))

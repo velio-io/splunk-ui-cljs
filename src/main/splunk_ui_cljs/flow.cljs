@@ -10,6 +10,7 @@
             applyNodeChanges applyEdgeChanges addEdge getIncomers getOutgoers useReactFlow]]
    ["@splunk/react-ui/Menu" :default Menu :refer [Item]]
    ["@splunk/react-ui/DefinitionList" :default DL :refer [Term Description]]
+   ["@splunk/react-ui/Popover" :default Popover]
    ["@splunk/themes" :refer [variables SplunkThemeProvider]]
    ["@splunk/themes/getTheme" :default get-theme]
    ["@splunk/react-icons/Cross" :default Cross]
@@ -18,6 +19,7 @@
    ["@splunk/react-icons/TrashCanCross" :default TrashCanCross]
    ["@splunk/react-icons/Cog" :default Cog]
    ["@splunk/react-icons/FloppyDisk" :default FloppyDisk]
+   ["@splunk/react-icons/QuestionCircle" :default QuestionCircle]
    ["elkjs/lib/elk.bundled.js" :default ELK]
    [splunk-ui-cljs.dropdown :as dropdown]
    [splunk-ui-cljs.input-text :as inputs]
@@ -357,6 +359,61 @@
       {:format-error (or (ex-data ex) (ex-message ex))})))
 
 
+(defstyled hint-icon :span
+  {:color   (j/get variables :contentColorDisabled)
+   ":hover" {:cursor "pointer"
+             :color  (j/get variables :contentColorMuted)}})
+
+
+(defn action-hint [{:keys [action-type]}]
+  (let [[hint-open? set-hint-open] (react/useState false)
+        [anchor set-anchor] (react/useState)
+        action-hint (react/useMemo
+                     #(get-in vsf.action-metadata/actions-controls [action-type :doc])
+                     #js [action-type])
+        anchor-ref  (utils/use-callback #(set-anchor %))
+        open-hint   (utils/use-callback #(set-hint-open true))
+        close-hint  (utils/use-callback #(set-hint-open false))]
+    (when action-hint
+      [:div
+       [hint-icon {:ref          anchor-ref
+                   :onMouseEnter open-hint
+                   :onMouseLeave close-hint}
+        [:> QuestionCircle]]
+       [:> Popover {:open           hint-open?
+                    :anchor         anchor
+                    :onRequestClose close-hint}
+        [:div {:style {:padding "10px"}}
+         action-hint]]])))
+
+
+(defstyled action-type-container :div
+  {:display       "flex"
+   :align-items   "center"
+   :margin-bottom "12px"})
+
+
+(defstyled action-type-label :span
+  {:font-size "14px"
+   :color     #(if (j/get % :error)
+                 (j/get variables :statusColorHigh)
+                 (j/get variables :contentColorMuted))})
+
+
+(defstyled action-type-hint :div
+  {:flex-grow 1})
+
+
+(defstyled action-type-control :div
+  {:flex "0 0 173px"})
+
+
+(defstyled action-type-error-message :div
+  {:color      (j/get variables :statusColorHigh)
+   :text-align "left"
+   :margin-top "6px"})
+
+
 (defn action-form
   "Form for editing action node."
   [{:keys [action-name action-type action-value]}]
@@ -420,16 +477,26 @@
               :change-on-blur? false
               :placeholder     "Enter action name"}]])
 
-         (let [action-type-error (:type errors)]
-           [label/label {:label       "Action type"
-                         :label-width 100
-                         :status      (when (some? action-type-error) "error")
-                         :help        action-type-error}
-            [dropdown/single-dropdown
-             {:on-change change-action-type
-              :model     action-type
-              :inline    false
-              :choices   actions-choices}]])
+         (let [action-type-error (:type errors)
+               has-error?        (some? action-type-error)]
+           [action-type-container
+            [action-type-label {:error has-error?}
+             "Action type"]
+
+            [action-type-hint
+             [:f> action-hint
+              {:action-type action-type}]]
+
+            [action-type-control
+             [dropdown/single-dropdown
+              {:on-change change-action-type
+               :model     action-type
+               :inline    false
+               :status    (when has-error? "error")
+               :choices   actions-choices}]
+             (when action-type-error
+               [action-type-error-message
+                action-type-error])]])
 
          (when (some? action-type)
            (let [{:keys [control-type] :as action-props}
@@ -812,20 +879,16 @@
             ^:js {:keys [fitView project getZoom addNodes]} (useReactFlow)
             _              (reset! *fit-fn fitView)
 
-            layout         (react/useCallback
-                            (fn []
-                              (let [{:keys [nodes edges]} @*flow-data]
-                                (-> (layout-nodes {:nodes nodes :edges edges})
-                                    (j/call :then
-                                            (fn [graph]
-                                              (reset! *flow-data graph)
-                                              ;; fit the view after the layout updating is done
-                                              (js/setTimeout @*fit-fn 10))))
-                                ;; returning undefined is required for react hook to work properly
-                                js/undefined))
-                            #js [])
+            layout         (utils/use-callback
+                            #(let [{:keys [nodes edges]} @*flow-data]
+                               (-> (layout-nodes {:nodes nodes :edges edges})
+                                   (j/call :then
+                                           (fn [graph]
+                                             (reset! *flow-data graph)
+                                             ;; fit the view after the layout updating is done
+                                             (js/setTimeout @*fit-fn 10))))))
 
-            on-connect-end (react/useCallback
+            on-connect-end (utils/use-callback
                             (fn [event]
                               (when-some [node-id @connect-source]
                                 (when (j/call-in event [:target :classList :contains] "react-flow__pane")
@@ -839,10 +902,8 @@
                                           new-edge      #js {:source node-id
                                                              :target (j/get new-node :id)}]
                                     (addNodes new-node)
-                                    (on-new-edge new-edge))))
-                              ;; returning undefined is required for react hook to work properly
-                              js/undefined)
-                            #js [project])]
+                                    (on-new-edge new-edge)))))
+                            [project])]
 
       ;; initial layout
       (react/useLayoutEffect
