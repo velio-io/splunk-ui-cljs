@@ -355,8 +355,7 @@
           action-fn        (get vsf-actions (symbol action-type))]
       (apply action-fn formatted-value))
     (catch js/Error ex
-      ;; @TODO add validation errors handling
-      {:format-error (or (ex-data ex) (ex-message ex))})))
+      {:format-error "Invalid action parameters. Please check the action documentation for correct usage."})))
 
 
 (defstyled hint-icon :span
@@ -412,6 +411,10 @@
   {:color      (j/get variables :statusColorHigh)
    :text-align "left"
    :margin-top "6px"})
+
+
+(defstyled action-control-error-message action-type-error-message
+  {:max-width "280px"})
 
 
 (defn action-form
@@ -502,12 +505,16 @@
            (let [{:keys [control-type] :as action-props}
                  (-> (get vsf.action-metadata/actions-controls action-type)
                      (assoc :state *action-state))]
-             (case control-type
-               :code [code-control action-props]
-               :input [strings-control action-props]
-               :map [map-control action-props]
-               :key-vals [key-vals-control action-props]
-               nil)))
+             [:<>
+              (case control-type
+                :code [code-control action-props]
+                :input [strings-control action-props]
+                :map [map-control action-props]
+                :key-vals [key-vals-control action-props]
+                nil)
+              (when (some? (:value errors))
+                [action-control-error-message
+                 (:value errors)])]))
 
          [:div {:style {:position "absolute"
                         :right    0
