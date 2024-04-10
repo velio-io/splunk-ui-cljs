@@ -9,4 +9,5 @@
   cljs-styled-components/cljs-styled-components {:mvn/version "0.1.12"}
   nextjournal/clojure-mode                      {:git/url "https://github.com/nextjournal/clojure-mode"
                                                  :sha     "694abc70d4c5bed542236a2c276599781afdbb98"}
+  metosin/malli                                 {:mvn/version "0.15.0"}
   velio-io/vsf                                  {:local/root "../vsf"}}}

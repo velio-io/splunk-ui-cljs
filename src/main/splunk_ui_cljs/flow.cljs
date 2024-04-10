@@ -4,6 +4,7 @@
    ["react" :as react]
    [clojure.string :as string]
    [reagent.core :as r]
+   [reagent.ratom :as ratom]
    [cljs-styled-components.reagent :refer-macros [defstyled defglobalstyle]]
    ["react-flow-renderer" :default ReactFlow
     :refer [Background Handle Position ReactFlowProvider BezierEdge getSimpleBezierPath
@@ -215,12 +216,31 @@
                  :color  (j/get variables :statusColorHigh)}})
 
 
+(defstyled control-error-message :div
+  {:color      (j/get variables :statusColorHigh)
+   :text-align "left"
+   :margin-top "6px"
+   :max-width  "280px"})
+
+
 (defn code-control
   "Action control for editing code."
   [{:keys [state]}]
-  [code-container
-   [code/code {:model     (:value @state)
-               :on-update #(swap! state assoc :value %)}]])
+  ;; initialize state value
+  (let [value (:value @state)]
+    (when (nil? value)
+      (swap! state assoc :value ""))
+    ;; render function
+    (fn [{:keys [state]}]
+      (let [{:keys [value errors]} @state]
+        [:div
+         [code-container
+          [code/code {:model     value
+                      :on-update #(swap! state assoc :value %)}]]
+
+         (when (some? (:value errors))
+           [control-error-message
+            (first (:value errors))])]))))
 
 
 (def field-type-formatters
@@ -243,29 +263,43 @@
 
 (defn strings-control
   "Action control for editing a simple string input."
-  [{:keys [id control-params state]}]
-  (let [field-type      (:type control-params)
-        formatter       (get field-type-formatters field-type identity)
-        input-component (if (= field-type :number)
-                          inputs/input-number
-                          inputs/input-text)]
-    ^{:key (str id "-" field-type)}
-    [input-component
-     {:model           (:value @state)
-      :on-change       #(swap! state assoc :value (formatter %))
-      :change-on-blur? false}]))
+  [{:keys [state]}]
+  ;; initialize state value
+  (let [value (:value @state)]
+    (when (nil? value)
+      (swap! state assoc :value "")))
+  ;; render function
+  (fn [{:keys [id control-params state]}]
+    (let [field-type      (:type control-params)
+          formatter       (get field-type-formatters field-type identity)
+          input-component (if (= field-type :number)
+                            inputs/input-number
+                            inputs/input-text)
+          {:keys [value errors]} @state]
+      [:<>
+       ^{:key (str id "-" field-type)}
+       [input-component
+        {:model           value
+         :status          (when (some? (:value errors)) "error")
+         :on-change       #(swap! state assoc :value (formatter %))
+         :change-on-blur? false}]
+       (when (some? (:value errors))
+         [control-error-message
+          (first (:value errors))])])))
 
 
 (defn map-control-input
   "Single key-value pair input for rendering inside map-control."
-  [{:keys [value on-change field-type field-label]}]
+  [{:keys [value error on-change field-type field-label]}]
   (let [formatter       (get field-type-formatters field-type identity)
         input-component (if (= field-type :number)
                           inputs/input-number
                           inputs/input-text)]
     [label/label
      {:label       field-label
-      :label-width 100}
+      :label-width 100
+      :status      (when (some? error) "error")
+      :help        (when (some? error) error)}
      [input-component
       {:model           value
        :on-change       #(on-change (formatter %))
@@ -274,16 +308,27 @@
 
 (defn map-control
   "Action control for editing a map of key-value pairs (keys are predefined)."
-  [{:keys [id control-params state]}]
-  (into [:<>]
-    (for [{field-label :label field :field field-type :type} (:fields control-params)
-          :let [field-value (get-in @state [:value field])]]
-      ^{:key (str id "-" field "-" field-label)}
-      [map-control-input
-       {:value       field-value
-        :on-change   #(swap! state assoc-in [:value field] %)
-        :field-type  field-type
-        :field-label field-label}])))
+  [{:keys [control-params state]}]
+  ;; initialize state value
+  (let [value (:value @state)]
+    (when (nil? value)
+      (->> (:fields control-params)
+           (into {} (map #(vector (:field %) nil)))
+           (swap! state assoc :value))))
+  ;; render function
+  (fn [{:keys [id control-params state]}]
+    (let [{:keys [value errors]} @state]
+      (into [:<>]
+        (for [{field-label :label field :field field-type :type} (:fields control-params)
+              :let [field-value (get value field)
+                    field-error (get-in errors [:value field 0])]]
+          ^{:key (str id "-" field "-" field-label)}
+          [map-control-input
+           {:value       field-value
+            :error       field-error
+            :on-change   #(swap! state assoc-in [:value field] %)
+            :field-type  field-type
+            :field-label field-label}])))))
 
 
 (defn key-value-pairs-form
@@ -309,16 +354,22 @@
 
 (defn key-vals-control
   "Action control for editing a map of key-value pairs (with inputs for keys)."
-  []
-  (let [pair-key   (r/atom "")
-        pair-value (r/atom "")]
+  [{:keys [state]}]
+  ;; initialize state value
+  (let [pair-key            (r/atom "")
+        pair-value          (r/atom "")
+        key-pair-populated? (ratom/reaction (not (every? not-empty [@pair-key @pair-value])))
+        value               (:value @state)]
+    (when (nil? value)
+      (swap! state assoc :value {}))
+    ;; render function
     (fn [{:keys [control-params state]}]
-      [:div
-       [key-value-pairs-form
-        {:state state}]
+      (let [pairs-number (:pairs-number control-params)
+            pairs-count  (count (:value @state))]
+        [:div
+         [key-value-pairs-form
+          {:state state}]
 
-       (let [pairs-number (:pairs-number control-params)
-             pairs-count  (count (:value @state))]
          (when (or (nil? pairs-number)
                    (and (some? pairs-number)
                         (> pairs-number pairs-count)))
@@ -337,9 +388,10 @@
               :change-on-blur? false}]
             [button/button {:label      "Add"
                             :appearance "toggle"
+                            :disabled?  key-pair-populated?
                             :on-click   #(do (swap! state assoc-in [:value @pair-key] @pair-value)
                                              (reset! pair-key "")
-                                             (reset! pair-value ""))}]]))])))
+                                             (reset! pair-value ""))}]])]))))
 
 
 (defn validate-action-params
@@ -353,9 +405,13 @@
                              formatted-value ;; multiple positional parameters
                              [formatted-value])
           action-fn        (get vsf-actions (symbol action-type))]
-      (apply action-fn formatted-value))
+      (apply action-fn formatted-value)
+      ;; return nil if no errors
+      nil)
     (catch js/Error ex
-      {:format-error "Invalid action parameters. Please check the action documentation for correct usage."})))
+      (-> (j/get ex :cause)
+          :explain-data
+          first))))
 
 
 (defstyled hint-icon :span
@@ -413,10 +469,6 @@
    :margin-top "6px"})
 
 
-(defstyled action-control-error-message action-type-error-message
-  {:max-width "280px"})
-
-
 (defn action-form
   "Form for editing action node."
   [{:keys [action-name action-type action-value]}]
@@ -449,8 +501,11 @@
                 (empty? action-type)
                 (swap! *action-state assoc-in [:errors :type] "Can't be empty")
 
-                (some? (:format-error @value-error))
-                (swap! *action-state assoc-in [:errors :value] (:format-error @value-error))
+                (some? @value-error)
+                (swap! *action-state assoc-in [:errors :value] @value-error)
+
+                (and (nil? @value-error) (some? (:value errors)))
+                (swap! *action-state assoc-in [:errors :value] nil)
 
                 :otherwise
                 (let [nodes (get-nodes)]
@@ -505,16 +560,12 @@
            (let [{:keys [control-type] :as action-props}
                  (-> (get vsf.action-metadata/actions-controls action-type)
                      (assoc :state *action-state))]
-             [:<>
-              (case control-type
-                :code [code-control action-props]
-                :input [strings-control action-props]
-                :map [map-control action-props]
-                :key-vals [key-vals-control action-props]
-                nil)
-              (when (some? (:value errors))
-                [action-control-error-message
-                 (:value errors)])]))
+             (case control-type
+               :code [code-control action-props]
+               :input [strings-control action-props]
+               :map [map-control action-props]
+               :key-vals [key-vals-control action-props]
+               nil)))
 
          [:div {:style {:position "absolute"
                         :right    0
