@@ -282,7 +282,8 @@
         {:model           value
          :status          (when (some? (:value errors)) "error")
          :on-change       #(swap! state assoc :value (formatter %))
-         :change-on-blur? false}]
+         :change-on-blur? false
+         :data-attr       {:test-field "string-input"}}]
        (when (some? (:value errors))
          [control-error-message
           (first (:value errors))])])))
@@ -290,7 +291,7 @@
 
 (defn map-control-input
   "Single key-value pair input for rendering inside map-control."
-  [{:keys [value error on-change field-type field-label]}]
+  [{:keys [value error on-change field field-type field-label]}]
   (let [formatter       (get field-type-formatters field-type identity)
         input-component (if (= field-type :number)
                           inputs/input-number
@@ -303,7 +304,8 @@
      [input-component
       {:model           value
        :on-change       #(on-change (formatter %))
-       :change-on-blur? false}]]))
+       :change-on-blur? false
+       :data-attr       {:test-field field}}]]))
 
 
 (defn map-control
@@ -327,6 +329,7 @@
            {:value       field-value
             :error       field-error
             :on-change   #(swap! state assoc-in [:value field] %)
+            :field       field
             :field-type  field-type
             :field-label field-label}])))))
 
@@ -379,13 +382,15 @@
              {:placeholder     "Key"
               :model           pair-key
               :on-change       #(reset! pair-key %)
-              :change-on-blur? false}]
+              :change-on-blur? false
+              :data-attr       {:test-field "key-name"}}]
             ^{:key (str "pair-value-" pairs-count)}
             [inputs/input-text
              {:placeholder     "Value"
               :model           pair-value
               :on-change       #(reset! pair-value %)
-              :change-on-blur? false}]
+              :change-on-blur? false
+              :data-attr       {:test-field "key-value"}}]
             [button/button {:label      "Add"
                             :appearance "toggle"
                             :disabled?  key-pair-populated?
@@ -616,27 +621,29 @@
         [:<>
          [:b action-name]
          [flow-node-actions {:className "flow-node-actions"}
-          [node-action-button {:onClick (fn [event]
-                                          (let [nodes (getNodes)]
-                                            (->> nodes
-                                                 (remove (fn [node]
-                                                           (when (= id (j/get node :id))
-                                                             (when (fn? on-delete)
-                                                               (on-delete node))
-                                                             true)))
-                                                 (to-array)
-                                                 (setNodes))))}
+          [node-action-button {:data-test "delete-action"
+                               :onClick   (fn [event]
+                                            (let [nodes (getNodes)]
+                                              (->> nodes
+                                                   (remove (fn [node]
+                                                             (when (= id (j/get node :id))
+                                                               (when (fn? on-delete)
+                                                                 (on-delete node))
+                                                               true)))
+                                                   (to-array)
+                                                   (setNodes))))}
            [:> TrashCanCross]]
-          [node-action-button {:onClick (fn [event]
-                                          (let [nodes (getNodes)]
-                                            (->> nodes
-                                                 (map (fn [node]
-                                                        (if (= id (j/get node :id))
-                                                          (->> (j/lit {:data {:status "editing"}})
-                                                               (deep-merge node))
-                                                          node)))
-                                                 (to-array)
-                                                 (setNodes))))}
+          [node-action-button {:data-test "edit-action"
+                               :onClick   (fn [event]
+                                            (let [nodes (getNodes)]
+                                              (->> nodes
+                                                   (map (fn [node]
+                                                          (if (= id (j/get node :id))
+                                                            (->> (j/lit {:data {:status "editing"}})
+                                                                 (deep-merge node))
+                                                            node)))
+                                                   (to-array)
+                                                   (setNodes))))}
            [:> Cog]]]])
 
       (when-not leaf?

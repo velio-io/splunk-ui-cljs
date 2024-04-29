@@ -49,6 +49,21 @@
     [flow {:model nil}]]))
 
 
+(def simple-model
+  (r/atom
+   {:foo {:actions {:action      :sdo
+                    :description {:message "Forward events to children"}
+                    :children    [{:action      :increment
+                                   :name        "Test"
+                                   :description {:message "Increment the :metric field"}
+                                   :children    nil}]}}}))
+
+(defn ^:export simple-flow [args]
+  (r/as-element
+   [:> SplunkThemeProvider {:family "prisma" :colorScheme "light"}
+    [flow {:model simple-model}]]))
+
+
 (defn ^:export flow-initial-nodes [args]
   (r/as-element
    [:> SplunkThemeProvider {:family "prisma" :colorScheme "light"}
