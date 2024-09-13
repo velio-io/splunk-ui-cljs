@@ -16,7 +16,7 @@
    - `position` (optional) Place where to place a label. One of left, top
    - `label-width` (optional) When labelPosition is left, the width of the label in pixels or a value with a unit.
    - `layout` (optional) A layout defines how controls are aligned and displayed. The 'fillJoin' layout is not supported by the scp theme.
-   - `help` (optional) A help test displayed at the bottom. Could be a string or rect (reagent) element e.g. [:div ...]
+   - `help` (optional) A help test displayed at the bottom. Could be a string or react (reagent) element e.g. [:div ...]
    - `status` (optional) Highlight the control group as having an error and optionally provide error text. If error text is provided, displays it below the control. The label will turn red, and the help text will turn red if error text was not provided. Child components will not turn red.
    - `required?` (optional) Sets the control required and adds an asterisk before the label.
    - `size` (optional) The size of the text label. Supported by the enterprise theme only.

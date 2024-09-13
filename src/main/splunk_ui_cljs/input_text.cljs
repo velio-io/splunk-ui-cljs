@@ -62,8 +62,8 @@
                            #(when-let [input (go/get input-ref "current")]
                               (go/set input "value" value))
                            20))]
-    (fn [{:keys [model on-change change-on-blur? input-type disabled? placeholder status width
-                 validation-regex rows inline append prepend labelledBy labelText id]
+    (fn [{:keys [model on-change change-on-blur? on-key-down input-type disabled? placeholder status width
+                 validation-regex rows inline append prepend labelledBy labelText id data-attr]
           :or   {disabled? false input-type "text" change-on-blur? true}}]
       (let [disabled?         (utils/model->value disabled?)
             on-change-handler (make-on-change-handler
@@ -75,26 +75,34 @@
                                 (keyword status))
             textarea?         (= input-type "textarea")
             base-component    (if textarea? textarea-base text-base)
-            base-props        {:onChange     (fn [event]
-                                               (let [new-val (go/getValueByKeys event "target" "value")]
-                                                 (if (or (not validation-regex) ;; no validation
-                                                         (= new-val "") ;; allow to clear the input value
-                                                         (and validation-regex ;; has validation and string matches regex
-                                                              (re-find validation-regex new-val)))
-                                                   (do (reset! local-state new-val)
-                                                       (when-not change-on-blur?
-                                                         (on-change-handler)))
-                                                   ;; if input didn't pass validation reset value to previous
-                                                   (set-input-value @local-state))))
-                               :onBlur       (fn [_event]
-                                               (when (and change-on-blur?
-                                                          (not= @local-state @external-state))
-                                                 (on-change-handler)))
-                               :defaultValue @local-state
-                               :inputRef     input-ref
-                               :disabled     disabled?
-                               :error        (= status :error)
-                               :$width       width}]
+            data              (when (some? data-attr)
+                                (into {} (map (fn [[attr-name attr-val]]
+                                                [(str "data-" (name attr-name)) attr-val])
+                                              data-attr)))
+            base-props        (merge data
+                                     {:onChange     (fn [event]
+                                                      (let [new-val (go/getValueByKeys event "target" "value")]
+                                                        (if (or (not validation-regex) ;; no validation
+                                                                (= new-val "") ;; allow to clear the input value
+                                                                (and validation-regex ;; has validation and string matches regex
+                                                                     (re-find validation-regex new-val)))
+                                                          (do (reset! local-state new-val)
+                                                              (when-not change-on-blur?
+                                                                (on-change-handler)))
+                                                          ;; if input didn't pass validation reset value to previous
+                                                          (set-input-value @local-state))))
+                                      :onBlur       (fn [_event]
+                                                      (when (and change-on-blur?
+                                                                 (not= @local-state @external-state))
+                                                        (on-change-handler)))
+                                      :onKeyDown    (fn [event]
+                                                      (when (fn? on-key-down)
+                                                        (on-key-down event @local-state)))
+                                      :defaultValue (str @local-state)
+                                      :inputRef     input-ref
+                                      :disabled     disabled?
+                                      :error        (= status :error)
+                                      :$width       width})]
         ;; Has model changed externally?
         (when (and (some? latest-ext-value)
                    (not= @external-state latest-ext-value))
@@ -119,6 +127,13 @@
   [props]
   [input-text-base
    (assoc props :input-type "text")])
+
+
+(defn input-number
+  "An input for numbers"
+  [props]
+  [input-text-base
+   (assoc props :input-type "number")])
 
 
 (defn input-password
